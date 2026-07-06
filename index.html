@@ -1126,7 +1126,7 @@ function renderTabAgente(err){
 function newFlowStep(type){
   const id = "s_" + Math.random().toString(36).slice(2,9);
   if(type === "periodo"){
-    return { id, type:"periodo", text:"", after:{ kind:null } };
+    return { id, type:"periodo", calendar_mode:"periodo", text:"", after:{ kind:null } };
   }
   return {
     id, type:"question", text:"", response_type:"sim_nao",
@@ -1143,7 +1143,7 @@ function stepNumber(err, stepId){
 function stepLabel(err, step){
   const t = htmlToText(step.text);
   const n = stepNumber(err, step.id);
-  const preview = t ? (t.length > 40 ? t.slice(0,40)+"…" : t) : (step.type === "periodo" ? "(coleta de período)" : "(sem texto)");
+  const preview = t ? (t.length > 40 ? t.slice(0,40)+"…" : t) : (step.type === "periodo" ? (step.calendar_mode === "data_unica" ? "(coleta de data única)" : "(coleta de período)") : "(sem texto)");
   return `Etapa ${n} — ${escapeHtml(preview)}`;
 }
 
@@ -1287,7 +1287,7 @@ function buildStepCard(step, err){
   const block = document.createElement("div");
   block.className = "question-block";
   block.setAttribute("data-step-id", step.id);
-  const typeLabel = step.type === "periodo" ? "Coleta de período (calendário)" : "Pergunta";
+  const typeLabel = step.type === "periodo" ? "Calendário" : "Pergunta";
   const markerColor = step.type === "periodo" ? "#2d6fd2" : "#7a1f6e";
   block.innerHTML = `
     <div class="top-row">
@@ -1308,8 +1308,28 @@ function buildStepCard(step, err){
 
   const body = block.querySelector(".step-body");
   if(step.type === "periodo"){
+    if(!step.calendar_mode) step.calendar_mode = "periodo";
+    const modeRow = document.createElement("div");
+    modeRow.style.marginBottom = "8px";
+    modeRow.innerHTML = `
+      <label class="hint" style="display:block;margin-bottom:4px;">Modo do calendário:</label>
+      <label style="margin-right:16px;cursor:pointer;font-size:13px;">
+        <input type="radio" name="calmode_${step.id}" value="periodo" ${step.calendar_mode==="periodo"?"checked":""} style="margin-right:4px;">Período (início e fim)
+      </label>
+      <label style="cursor:pointer;font-size:13px;">
+        <input type="radio" name="calmode_${step.id}" value="data_unica" ${step.calendar_mode==="data_unica"?"checked":""} style="margin-right:4px;">Data única
+      </label>
+    `;
+    modeRow.querySelectorAll("input[type=radio]").forEach(r => {
+      r.onchange = e => { step.calendar_mode = e.target.value; afterLabel.textContent = calAfterLabel(step); fieldChanged(); updateSystemPrompt(err); };
+    });
+    body.appendChild(modeRow);
     const afterWrap = document.createElement("div");
-    afterWrap.innerHTML = `<label class="hint">Depois de coletar início e fim do período:</label>`;
+    const calAfterLabel = s => s.calendar_mode === "data_unica" ? "Depois de coletar a data:" : "Depois de coletar início e fim do período:";
+    const afterLabel = document.createElement("label");
+    afterLabel.className = "hint";
+    afterLabel.textContent = calAfterLabel(step);
+    afterWrap.appendChild(afterLabel);
     const afterEditor = document.createElement("div");
     afterWrap.appendChild(afterEditor);
     body.appendChild(afterWrap);
@@ -2192,7 +2212,8 @@ function describeFlowFromStep(ef, stepId, indent, visited){
   let out = "";
   const n = ef.flow_steps.findIndex(s => s.id === step.id) + 1;
   if(step.type === "periodo"){
-    out += `${indent}ETAPA ${n} Coleta de período: ${htmlToText(step.text) || "solicitar data inicial e final"}\n`;
+    const calDesc = step.calendar_mode === "data_unica" ? "solicitar data única" : "solicitar data inicial e final";
+    out += `${indent}ETAPA ${n} Coleta de ${step.calendar_mode === "data_unica" ? "data única" : "período"}: ${htmlToText(step.text) || calDesc}\n`;
     out += describeAfter(ef, step.after, indent + "  ", visited);
   } else {
     out += `${indent}ETAPA ${n} Pergunta (${step.response_type}): ${htmlToText(step.text)}\n`;
@@ -2227,7 +2248,8 @@ function buildFlowScriptHtml(ef, stepId, depth, visited){
   let html = `<div class="flow-script-step" style="margin-left:${depth*20}px;">`;
   html += `<div class="flow-script-q"><strong>${n})</strong> ${qtext}</div>`;
   if(step.type === "periodo"){
-    html += `<div class="hint" style="margin:2px 0 8px;">📅 Mostrar o calendário. Cliente escolhe a data inicial e final.</div>`;
+    const calHint = step.calendar_mode === "data_unica" ? "📅 Mostrar o calendário. Cliente escolhe uma data." : "📅 Mostrar o calendário. Cliente escolhe a data inicial e final.";
+    html += `<div class="hint" style="margin:2px 0 8px;">${calHint}</div>`;
     html += afterScriptHtml(ef, step.after, depth, visited);
   } else if(step.response_type === "texto_livre"){
     html += `<div class="hint" style="margin:2px 0 8px;">✏️ Resposta em texto livre.</div>`;
@@ -2263,7 +2285,8 @@ function buildFlowPreviewHtml(ef, stepId, visited){
   const n = ef.flow_steps.findIndex(s => s.id === step.id) + 1;
   let html = "";
   if(step.type === "periodo"){
-    html += `<li><strong>Etapa ${n}</strong> — coleta de período (calendário)${htmlToText(step.text) ? ': '+escapeHtml(htmlToText(step.text)) : ''}<ul>${afterPreviewHtml(ef, step.after, visited)}</ul></li>`;
+    const calLabel = step.calendar_mode === "data_unica" ? "coleta de data única (calendário)" : "coleta de período (calendário)";
+    html += `<li><strong>Etapa ${n}</strong> — ${calLabel}${htmlToText(step.text) ? ': '+escapeHtml(htmlToText(step.text)) : ''}<ul>${afterPreviewHtml(ef, step.after, visited)}</ul></li>`;
   } else {
     const qtext = escapeHtml(htmlToText(step.text)) || "(sem texto)";
     html += `<li><strong>Etapa ${n}</strong> — ${qtext}`;
@@ -2397,19 +2420,34 @@ function openBotSimulation(err){
     }
     if(step.type === "periodo"){
       if(htmlToText(step.text)) addBotMsg(htmlToText(step.text));
-      addBotMsg("Informe o período (data inicial e final):");
-      addInteractive(div => {
-        const start = document.createElement("input"); start.type = "date";
-        const end = document.createElement("input"); end.type = "date";
-        const btn = document.createElement("button");
-        btn.textContent = "Enviar";
-        btn.onclick = () => {
-          if(!start.value || !end.value) return;
-          addUserMsg(`${start.value} até ${end.value}`); clearInteractive();
-          handleAfter(step.after, { start:start.value, end:end.value });
-        };
-        div.appendChild(start); div.appendChild(end); div.appendChild(btn);
-      });
+      if(step.calendar_mode === "data_unica"){
+        addBotMsg("Informe a data:");
+        addInteractive(div => {
+          const dateInput = document.createElement("input"); dateInput.type = "date";
+          const btn = document.createElement("button");
+          btn.textContent = "Enviar";
+          btn.onclick = () => {
+            if(!dateInput.value) return;
+            addUserMsg(dateInput.value); clearInteractive();
+            handleAfter(step.after, { date: dateInput.value });
+          };
+          div.appendChild(dateInput); div.appendChild(btn);
+        });
+      } else {
+        addBotMsg("Informe o período (data inicial e final):");
+        addInteractive(div => {
+          const start = document.createElement("input"); start.type = "date";
+          const end = document.createElement("input"); end.type = "date";
+          const btn = document.createElement("button");
+          btn.textContent = "Enviar";
+          btn.onclick = () => {
+            if(!start.value || !end.value) return;
+            addUserMsg(`${start.value} até ${end.value}`); clearInteractive();
+            handleAfter(step.after, { start:start.value, end:end.value });
+          };
+          div.appendChild(start); div.appendChild(end); div.appendChild(btn);
+        });
+      }
       return;
     }
     addBotMsg(htmlToText(step.text) || "Pergunta");
