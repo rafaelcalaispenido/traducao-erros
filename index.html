@@ -393,12 +393,6 @@ const SEED_RAW = {
     ["E513","Valor Líquido incorreto"],
     ["E522","Data de emissão do RPS não pode ser inferior à data de hoje menos o prazo limite"]
   ],
-  xml_soap: [
-    ["SOAP_EXCEPTION","Exception occurred while trying to invoke service method"],
-    ["ABRASF_VERSION","Versão do modelo ABRASF indicada não está vigente"],
-    ["AUTH_ERROR","Falha na autenticação — credenciais inválidas ou certificado não reconhecido"],
-    ["TIMEOUT","Timeout na transmissão — falha de conexão com o servidor nacional"]
-  ]
 };
 
 /* Sugestões de título amigável (3 por erro) para acelerar o preenchimento da Aba 2 */
@@ -478,7 +472,7 @@ function buildSeed(){
   return { version:"1.0", exported_at:new Date().toISOString(), errors };
 }
 
-const GROUP_LABELS = { portal_nacional:"Portal Nacional", abrasf:"ABRASF", xml_soap:"XML/SOAP", sefaz_nfe55:"SEFAZ NF-e 55" };
+const GROUP_LABELS = { portal_nacional:"Portal Nacional", abrasf:"ABRASF", sefaz_nfe55:"SEFAZ NF-e 55" };
 const STATUS_LABELS = { nao_mapeado:"Não mapeado", em_revisao:"Em revisão", pronto:"Pronto" };
 
 /* ================= ESTADO ================= */
@@ -506,6 +500,9 @@ async function loadFromGist(){
     const file = data.files && data.files[GIST_FILE];
     if(file && file.content){
       state = JSON.parse(file.content);
+      const before = state.errors.length;
+      state.errors = state.errors.filter(e => e.group !== "xml_soap");
+      if(state.errors.length !== before) await saveToGist(true);
       setSyncStatus("ok","Sincronizado");
     } else {
       state = buildSeed();
