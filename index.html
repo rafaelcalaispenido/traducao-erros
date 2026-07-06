@@ -13,6 +13,15 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;font-family:-apple-system,"Inter",Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased;}
+  #authOverlay{position:fixed;inset:0;background:rgba(15,20,30,0.7);display:flex;align-items:center;justify-content:center;z-index:9999;}
+  #authBox{background:#fff;border-radius:14px;padding:36px 40px;width:340px;box-shadow:0 8px 40px rgba(0,0,0,0.18);text-align:center;}
+  #authBox h2{margin:0 0 6px;font-size:18px;color:var(--text);}
+  #authBox p{margin:0 0 20px;font-size:13px;color:var(--text-light);}
+  #authInput{width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;outline:none;transition:border-color .15s;box-sizing:border-box;}
+  #authInput:focus{border-color:var(--primary);}
+  #authBtn{margin-top:12px;width:100%;padding:10px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+  #authBtn:hover{background:#621860;}
+  #authErr{margin-top:10px;font-size:12px;color:var(--danger);min-height:16px;}
   header{display:flex;align-items:center;gap:16px;padding:12px 24px;background:#fff;border-bottom:1px solid var(--border);box-shadow:var(--shadow-sm);position:relative;z-index:10;}
   .agents-menu{position:relative;}
   .agents-btn{background:none;border:1.5px solid var(--border);border-radius:8px;padding:6px 13px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;display:flex;align-items:center;gap:5px;transition:border-color .15s,color .15s;}
@@ -288,14 +297,37 @@
   </main>
 </div>
 
+<div id="authOverlay">
+  <div id="authBox">
+    <h2>Acesso restrito</h2>
+    <p>Digite a senha para acessar a ferramenta</p>
+    <input id="authInput" type="password" placeholder="Senha" autofocus />
+    <button id="authBtn">Entrar</button>
+    <div id="authErr"></div>
+  </div>
+</div>
+
 <script>
-/* ================= OFUSCAÇÃO DO TOKEN GITHUB ================= */
-// Token fragmentado em 4 partes + reassembly em runtime (cada parte em base64)
-const _a = atob("Z2hwX2JpbnlLMA==");
-const _b = atob("aHByd0VtU2pPYQ==");
-const _c = atob("MUxCVE1jZ0E5cg==");
-const _d = atob("MWV2RjA2Y1YyaQ==");
-const getToken = () => _a + _b + _c + _d;
+/* ================= TOKEN CRIPTOGRAFADO (AES-GCM + PBKDF2) ================= */
+const _ENC = {
+  salt: "9cfee3a419c6e7ef8d887bd8a210c840",
+  iv:   "ef21ad95e196af4d46344f61",
+  data: "767888dea20f23fe319bc95ff3b83fde098efd6d306fd637d00e4e43a75266912743063c9c527e8be6c18318ad988195df6183c53a4d4d16"
+};
+let _token = null;
+const getToken = () => _token;
+
+function fromHex(hex){ return new Uint8Array(hex.match(/.{2}/g).map(b=>parseInt(b,16))); }
+
+async function decryptToken(password){
+  const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey(
+    { name:"PBKDF2", salt:fromHex(_ENC.salt), iterations:100000, hash:"SHA-256" },
+    keyMaterial, { name:"AES-GCM", length:256 }, false, ["decrypt"]
+  );
+  const decrypted = await crypto.subtle.decrypt({ name:"AES-GCM", iv:fromHex(_ENC.iv) }, key, fromHex(_ENC.data));
+  return new TextDecoder().decode(decrypted);
+}
 
 const GIST_ID = "021dfd6c019adda202dd94d04dc34a5b";
 const GIST_FILE = "nfse-errors.json";
@@ -2659,8 +2691,35 @@ function mountRichEditor(container, html, placeholder, onChange){
 }
 
 /* ================= INIT ================= */
-applyHash();
-loadFromGist();
+(function setupAuth(){
+  const overlay = document.getElementById("authOverlay");
+  const input   = document.getElementById("authInput");
+  const btn     = document.getElementById("authBtn");
+  const errEl   = document.getElementById("authErr");
+
+  async function tryUnlock(){
+    errEl.textContent = "";
+    btn.disabled = true;
+    btn.textContent = "Verificando...";
+    try {
+      _token = await decryptToken(input.value);
+      overlay.remove();
+      applyHash();
+      loadFromGist();
+    } catch(e) {
+      _token = null;
+      errEl.textContent = "Senha incorreta. Tente novamente.";
+      input.value = "";
+      input.focus();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Entrar";
+    }
+  }
+
+  btn.addEventListener("click", tryUnlock);
+  input.addEventListener("keydown", e => { if(e.key === "Enter") tryUnlock(); });
+})();
 </script>
 </body>
 </html>
