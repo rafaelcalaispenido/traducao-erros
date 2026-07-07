@@ -1052,19 +1052,9 @@ function renderTabAgente(err){
         <button class="btn-ghost btn-sm" id="btnAddFlowStep">+ Adicionar etapa de pergunta</button>
         <button class="btn-ghost btn-sm" id="btnAddPeriodoStep">+ Adicionar etapa de período (calendário)</button>
 
-        <div class="section-title">3.3 Acompanhamento pós-correção</div>
+        <div class="section-title">3.3 Condições de escalonamento</div>
         <div class="field">
-          <label class="toggle"><input type="checkbox" id="a_followup_enabled" ${followup.enabled?'checked':''}> Permitir que o cliente acompanhe o status das vendas após a correção</label>
-        </div>
-        <div class="field">
-          <label>Mensagem de acompanhamento exibida ao cliente</label>
-          <div class="rich-editor" id="a_followup_msg"></div>
-        </div>
-
-        <div class="section-title">3.4 Condições de escalonamento</div>
-        <div class="field">
-          <label>Mensagem de escalonamento</label>
-          <div class="rich-editor" id="a_esc_msg"></div>
+          <p style="margin:0;font-size:13px;color:var(--text);background:var(--primary-light);border:1px solid #e7d3e2;border-radius:8px;padding:10px 14px;">As correções não foram possíveis ser aplicadas, deseja seguir com a abertura de um chamado para o nosso suporte técnico?</p>
         </div>
       </div>
       <div class="agente-col-preview">
@@ -1081,13 +1071,6 @@ function renderTabAgente(err){
       </div>
     </div>
   `;
-  document.getElementById("a_followup_enabled").onchange = e => { followup.enabled = e.target.checked; fieldChanged(); updateSystemPrompt(err); };
-  mountRichEditor(document.getElementById("a_followup_msg"), followup.message, "Ex.: \"Sua correção foi aplicada, posso te avisar quando a venda for reprocessada?\"", html => {
-    followup.message = html; fieldChanged(); updateSystemPrompt(err);
-  });
-  mountRichEditor(document.getElementById("a_esc_msg"), err.agent_flow.escalation.message, "Mensagem exibida ao escalar para suporte humano...", html => {
-    err.agent_flow.escalation.message = html; fieldChanged(); updateSystemPrompt(err);
-  });
   document.getElementById("btnAddFlowStep").onclick = () => {
     const step = newFlowStep("question");
     err.agent_flow.flow_steps.push(step);
@@ -2325,14 +2308,7 @@ function updateSystemPrompt(err){
     prompt += `\nFLUXO DE PERGUNTAS E AÇÕES (siga a árvore abaixo de acordo com as respostas do cliente):\n`;
     prompt += describeFlowFromStep(ef, ef.start_step_id, "", new Set());
   }
-  if(ef.post_fix_followup && ef.post_fix_followup.enabled){
-    prompt += `\nACOMPANHAMENTO PÓS-CORREÇÃO: permitido. `;
-    const followupText = htmlToText(ef.post_fix_followup.message);
-    if(followupText) prompt += followupText;
-  }
-  prompt += `\nESCALONAMENTO: se não conseguir resolver, escale para suporte humano.`;
-  const escMsgText = htmlToText(ef.escalation.message);
-  if(escMsgText) prompt += `\nMensagem de escalonamento: ${escMsgText}`;
+  prompt += `\nESCALONAMENTO: se não conseguir resolver, pergunte ao cliente: "As correções não foram possíveis ser aplicadas, deseja seguir com a abertura de um chamado para o nosso suporte técnico?"`;
   err.agent_flow.system_prompt_preview = prompt;
   box.textContent = prompt;
 }
@@ -2594,11 +2570,6 @@ function openBotSimulation(err){
   function finalizeApplication(sales){
     addBotMsg(`Tratativa aplicada com sucesso em ${sales.length} venda(s).`);
     if(pendingFinalMessage) addBotMsg(pendingFinalMessage);
-    const followup = err.agent_flow.post_fix_followup;
-    if(followup && followup.enabled){
-      const msg = htmlToText(followup.message);
-      addBotMsg(msg || "Você pode acompanhar o status dessas vendas por aqui a qualquer momento.");
-    }
   }
 
   walkStep(err.agent_flow.start_step_id);
