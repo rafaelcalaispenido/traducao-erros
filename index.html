@@ -1062,19 +1062,9 @@ function renderTabAgente(err){
         </div>
 
         <div class="section-title">3.4 Condições de escalonamento</div>
-        <div class="row">
-          <div class="field" style="max-width:200px;">
-            <label>Após quantas tentativas o agente escala?</label>
-            <input type="number" id="a_attempts" min="1" value="${err.agent_flow.escalation.after_attempts}">
-          </div>
-        </div>
         <div class="field">
           <label>Mensagem de escalonamento</label>
           <div class="rich-editor" id="a_esc_msg"></div>
-        </div>
-        <div class="field">
-          <label>Link do Zendesk</label>
-          <input type="url" id="a_zendesk" value="${escapeAttr(err.agent_flow.escalation.zendesk_url)}">
         </div>
       </div>
       <div class="agente-col-preview">
@@ -1095,11 +1085,9 @@ function renderTabAgente(err){
   mountRichEditor(document.getElementById("a_followup_msg"), followup.message, "Ex.: \"Sua correção foi aplicada, posso te avisar quando a venda for reprocessada?\"", html => {
     followup.message = html; fieldChanged(); updateSystemPrompt(err);
   });
-  document.getElementById("a_attempts").onchange = e => { err.agent_flow.escalation.after_attempts = +e.target.value || 3; fieldChanged(); updateSystemPrompt(err); };
   mountRichEditor(document.getElementById("a_esc_msg"), err.agent_flow.escalation.message, "Mensagem exibida ao escalar para suporte humano...", html => {
     err.agent_flow.escalation.message = html; fieldChanged(); updateSystemPrompt(err);
   });
-  document.getElementById("a_zendesk").oninput = e => { err.agent_flow.escalation.zendesk_url = e.target.value; fieldChanged(); updateSystemPrompt(err); };
   document.getElementById("btnAddFlowStep").onclick = () => {
     const step = newFlowStep("question");
     err.agent_flow.flow_steps.push(step);
@@ -2342,10 +2330,9 @@ function updateSystemPrompt(err){
     const followupText = htmlToText(ef.post_fix_followup.message);
     if(followupText) prompt += followupText;
   }
-  prompt += `\nESCALONAMENTO: após ${ef.escalation.after_attempts} tentativas sem solução, escale para suporte humano.`;
+  prompt += `\nESCALONAMENTO: se não conseguir resolver, escale para suporte humano.`;
   const escMsgText = htmlToText(ef.escalation.message);
   if(escMsgText) prompt += `\nMensagem de escalonamento: ${escMsgText}`;
-  if(ef.escalation.zendesk_url) prompt += `\nLink Zendesk: ${ef.escalation.zendesk_url}`;
   err.agent_flow.system_prompt_preview = prompt;
   box.textContent = prompt;
 }
@@ -2605,7 +2592,7 @@ function openBotSimulation(err){
   }
 
   function finalizeApplication(sales){
-    addBotMsg(`Tratativa aplicada com sucesso em ${sales.length} venda(s). (Simulação — nenhuma alteração real foi feita.)`);
+    addBotMsg(`Tratativa aplicada com sucesso em ${sales.length} venda(s).`);
     if(pendingFinalMessage) addBotMsg(pendingFinalMessage);
     const followup = err.agent_flow.post_fix_followup;
     if(followup && followup.enabled){
