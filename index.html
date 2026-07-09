@@ -310,9 +310,9 @@
 <script>
 /* ================= TOKEN CRIPTOGRAFADO (AES-GCM + PBKDF2) ================= */
 const _ENC = {
-  salt: "9cfee3a419c6e7ef8d887bd8a210c840",
-  iv:   "ef21ad95e196af4d46344f61",
-  data: "767888dea20f23fe319bc95ff3b83fde098efd6d306fd637d00e4e43a75266912743063c9c527e8be6c18318ad988195df6183c53a4d4d16"
+  salt: "5355287455026cabf1801ebad327b06c",
+  iv:   "b536e19fab9fe1426a15b1cb",
+  data: "f4ff9b6ac4d473b402c2330144e0766b337c8a77dbdcdd3162a79037a1976ab07b732655390ff8de8ea5968438694df8b39af84fcbaf95bf"
 };
 let _token = null;
 const getToken = () => _token;
@@ -1471,6 +1471,86 @@ function diagramLayout(err){
   return { positions, termPositions, depth };
 }
 
+function autoLayoutDiagram(err){
+  /* Layout de árvore vertical (Reingold-Tilford simplificado):
+     - Folhas (terminais e steps sem filhos) recebem colunas sequenciais da esquerda
+     - Nós internos se centralizam horizontalmente sobre os filhos
+     - Profundidade determina o Y → linhas ficam quase verticais, sem cruzamentos */
+  const ef = err.agent_flow;
+  ef.diagram_positions = {};
+  ef.diagram_term_positions = {};
+  const positions = ef.diagram_positions;
+  const termPositions = ef.diagram_term_positions;
+
+  const COL_W = 290;  // largura de uma coluna (box + gap)
+  const ROW_H = 220;  // altura de uma linha (box + gap)
+  const START_X = 40;
+  const START_Y = 40;
+
+  let leafIdx = 0;
+  const nodeCol = {};   // stepId | termKey → coluna (float, pode ser .5)
+  const nodeRow = {};   // stepId | termKey → linha (int)
+
+  function processStep(stepId, row, visited){
+    if(visited.has(stepId)){
+      // ciclo: tratar como folha se ainda não posicionado
+      if(nodeCol[stepId] === undefined){ nodeCol[stepId] = leafIdx++; nodeRow[stepId] = row; }
+      return nodeCol[stepId];
+    }
+    const v = new Set(visited); v.add(stepId);
+    nodeRow[stepId] = row;
+
+    const step = ef.flow_steps.find(s => s.id === stepId);
+    if(!step){ nodeCol[stepId] = leafIdx++; return nodeCol[stepId]; }
+
+    const branches = stepBranchTargets(step);
+    const childCols = [];
+
+    branches.forEach(b => {
+      if(!b.after || !b.after.kind) return; // sem destino — ignora
+      if(b.after.kind === "step" && b.after.step_id){
+        childCols.push(processStep(b.after.step_id, row + 1, v));
+      } else if(b.after.kind === "message" || b.after.kind === "apply_correction"){
+        const key = stepId + "::" + b.key;
+        nodeRow[key] = row + 1;
+        nodeCol[key] = leafIdx++;
+        childCols.push(nodeCol[key]);
+      }
+    });
+
+    // se não há filhos conectados → folha
+    if(!childCols.length){ nodeCol[stepId] = leafIdx++; return nodeCol[stepId]; }
+
+    // centrar acima dos filhos
+    nodeCol[stepId] = (Math.min(...childCols) + Math.max(...childCols)) / 2;
+    return nodeCol[stepId];
+  }
+
+  if(ef.start_step_id) processStep(ef.start_step_id, 0, new Set());
+
+  // Orphans (steps não alcançados pelo start)
+  ef.flow_steps.forEach(step => {
+    if(nodeCol[step.id] === undefined){ nodeCol[step.id] = leafIdx++; nodeRow[step.id] = 0; }
+  });
+
+  // Converter col/row → pixels
+  ef.flow_steps.forEach(step => {
+    if(nodeCol[step.id] !== undefined){
+      positions[step.id] = {
+        x: Math.round(START_X + nodeCol[step.id] * COL_W),
+        y: Math.round(START_Y + (nodeRow[step.id] || 0) * ROW_H)
+      };
+    }
+  });
+  Object.keys(nodeCol).forEach(key => {
+    if(!key.includes("::")) return;
+    termPositions[key] = {
+      x: Math.round(START_X + nodeCol[key] * COL_W),
+      y: Math.round(START_Y + (nodeRow[key] || 0) * ROW_H)
+    };
+  });
+}
+
 function diagramBranchIcon(step){
   if(step.type === "periodo") return "📅";
   if(step.response_type === "texto_livre") return "✏️";
@@ -1508,6 +1588,7 @@ function renderTabDiagrama(err){
     </div>
     <button class="btn-ghost btn-sm" id="btnDiagAddQuestion">+ Pergunta</button>
     <button class="btn-ghost btn-sm" id="btnDiagAddPeriodo" style="margin-left:6px;">+ Período (calendário)</button>
+    <button class="btn-ghost btn-sm" id="btnDiagAutoLayout" style="margin-left:16px;border-color:var(--teal);color:var(--teal);" title="Reorganiza automaticamente todas as caixas">⟳ Reorganizar layout</button>
     <div id="diagramCanvasWrap" style="position:relative;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-top:10px;height:600px;background-color:var(--bg-soft);background-image:radial-gradient(circle,#d8dee2 1px,transparent 1px);background-size:18px 18px;">
       <div id="diagramCanvas" style="position:relative;width:${maxX+260}px;height:${maxY+200}px;">
         <svg id="diagramSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:10;">
@@ -2161,6 +2242,173 @@ function renderTabDiagrama(err){
     fieldChanged();
     renderTabDiagrama(err);
   };
+  document.getElementById("btnDiagAutoLayout").onclick = () => {
+    renderPathExpansionView(err);
+  };
+}
+
+/* ---- PATH EXPANSION VIEW ---- */
+function findAllPaths(ef){
+  const paths = [];
+  function dfs(stepId, currentPath, visited){
+    if(visited.has(stepId)){
+      paths.push([...currentPath, { type:"step", stepId, isCycle:true }]);
+      return;
+    }
+    const step = ef.flow_steps.find(s => s.id === stepId);
+    if(!step){ if(currentPath.length) paths.push([...currentPath]); return; }
+    const node = { type:"step", stepId };
+    const branches = stepBranchTargets(step).filter(b => b.after && b.after.kind);
+    if(!branches.length){
+      paths.push([...currentPath, node]);
+      return;
+    }
+    const newVisited = new Set(visited); newVisited.add(stepId);
+    branches.forEach(branch => {
+      if(branch.after.kind === "step" && branch.after.step_id){
+        dfs(branch.after.step_id, [...currentPath, node], newVisited);
+      } else {
+        paths.push([...currentPath, node, { type:"term", stepId, branchKey:branch.key, branch }]);
+      }
+    });
+  }
+  if(ef.start_step_id) dfs(ef.start_step_id, [], new Set());
+  if(!paths.length && ef.flow_steps.length){
+    ef.flow_steps.forEach(s => paths.push([{ type:"step", stepId:s.id }]));
+  }
+  return paths;
+}
+
+function renderPathExpansionView(err){
+  const p = document.getElementById("panelDiagrama");
+  if(!p) return;
+  if(window.__diagramDisarmPort) window.__diagramDisarmPort();
+  const ef = err.agent_flow;
+  const paths = findAllPaths(ef);
+
+  const COL_W  = 260;
+  const ROW_H  = 170;
+  const BOX_W  = 220;
+  const BOX_H  = 100;
+  const START_X = 30;
+  const START_Y = 20;
+
+  const maxDepth = paths.reduce((m, path) => Math.max(m, path.length), 0);
+  const canvasW = START_X + paths.length * COL_W + 40;
+  const canvasH = START_Y + maxDepth * ROW_H + BOX_H + 40;
+
+  p.innerHTML = `
+    <div class="hint" style="margin-bottom:10px;">Visão de caminhos — cada coluna é um caminho independente do fluxo. Nós compartilhados aparecem em cada coluna. Use <strong>← Voltar ao editor</strong> para editar conexões.</div>
+    <div class="diagram-legend">
+      <span class="lg-item"><span class="lg-dot" style="background:#7a1f6e;"></span> Pergunta</span>
+      <span class="lg-item"><span class="lg-dot" style="background:#2560b8;"></span> Período</span>
+      <span class="lg-item"><span class="lg-dot" style="background:#9a6512;"></span> Mensagem final</span>
+      <span class="lg-item"><span class="lg-dot" style="background:#0f7a66;"></span> Corrigir vendas</span>
+    </div>
+    <button class="btn-ghost btn-sm" id="btnPathBack" style="border-color:var(--teal);color:var(--teal);">← Voltar ao editor</button>
+    <div id="pathExpCanvas" style="position:relative;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-top:10px;height:600px;background-color:var(--bg-soft);background-image:radial-gradient(circle,#d8dee2 1px,transparent 1px);background-size:18px 18px;">
+      <div id="pathExpInner" style="position:relative;width:${canvasW}px;height:${canvasH}px;">
+        <svg id="pathExpSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:1;">
+          <defs>
+            <marker id="peArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill="#888"></path>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+    </div>
+  `;
+
+  const inner = document.getElementById("pathExpInner");
+  const svg   = document.getElementById("pathExpSvg");
+
+  function stepLabel(stepId){
+    const step = ef.flow_steps.find(s => s.id === stepId);
+    if(!step) return "(?)";
+    const n = ef.flow_steps.findIndex(s => s.id === stepId) + 1;
+    const text = htmlToText(step.text) || "";
+    const preview = text.length > 55 ? text.slice(0,55)+"…" : text;
+    const icon = diagramBranchIcon(step);
+    return `<strong>${icon} Etapa ${n}</strong><br><span style="font-size:11px;color:var(--text-muted,#666);">${escapeHtml(preview)||"(sem texto)"}</span>`;
+  }
+
+  paths.forEach((path, colIdx) => {
+    const colX = START_X + colIdx * COL_W;
+    let prevBoxBottom = null;
+    let prevBoxCenterX = null;
+
+    path.forEach((node, rowIdx) => {
+      const boxX = colX;
+      const boxY = START_Y + rowIdx * ROW_H;
+      const centerX = boxX + BOX_W / 2;
+      const boxBottom = boxY + BOX_H;
+
+      // Draw arrow from previous box
+      if(prevBoxBottom !== null){
+        const line = document.createElementNS("http://www.w3.org/2000/svg","line");
+        line.setAttribute("x1", prevBoxCenterX);
+        line.setAttribute("y1", prevBoxBottom);
+        line.setAttribute("x2", centerX);
+        line.setAttribute("y2", boxY);
+        line.setAttribute("stroke", "#aaa");
+        line.setAttribute("stroke-width", "2");
+        line.setAttribute("marker-end", "url(#peArrow)");
+        svg.appendChild(line);
+      }
+
+      const box = document.createElement("div");
+      if(node.type === "term"){
+        const isCorr = node.branch && node.branch.after && node.branch.after.kind === "apply_correction";
+        box.className = "diagram-box diagram-term diagram-term-" + (isCorr ? "correction" : "message");
+        box.style.borderStyle = "dashed";
+        const icon = isCorr ? "✅" : "💬";
+        const text = node.branch && node.branch.after ? htmlToText(node.branch.after.text) || "(sem texto)" : "(sem texto)";
+        box.innerHTML = `<div class="db-head"><span>${icon} Fim</span></div><div class="db-body" style="font-size:11px;">${escapeHtml(text)}</div>`;
+      } else {
+        const step = ef.flow_steps.find(s => s.id === node.stepId);
+        const isPeriodo = step && step.type === "periodo";
+        box.className = "diagram-box diagram-box-" + (isPeriodo ? "periodo" : "pergunta");
+        box.style.cursor = "default";
+        box.innerHTML = `
+          <div class="db-head">
+            <span>${stepLabel(node.stepId)}</span>
+            <div class="db-actions">
+              <button class="db-edit path-edit-btn" data-step-id="${node.stepId}" title="Editar na aba 3" style="cursor:pointer;">✎</button>
+            </div>
+          </div>
+        `;
+        if(node.isCycle){
+          const badge = document.createElement("div");
+          badge.style = "font-size:10px;color:#888;padding:0 8px 4px;";
+          badge.textContent = "↺ ciclo";
+          box.appendChild(badge);
+        }
+      }
+
+      box.style.left = boxX + "px";
+      box.style.top  = boxY + "px";
+      box.style.width = BOX_W + "px";
+      box.style.minHeight = BOX_H + "px";
+      box.style.zIndex = "2";
+      inner.appendChild(box);
+
+      prevBoxBottom  = boxBottom;
+      prevBoxCenterX = centerX;
+    });
+  });
+
+  // Wire edit buttons
+  inner.querySelectorAll(".path-edit-btn").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const stepId = btn.getAttribute("data-step-id");
+      activeTab = "agente";
+      renderMain();
+      setTimeout(() => highlightStep(stepId), 50);
+    });
+  });
+
+  document.getElementById("btnPathBack").onclick = () => renderTabDiagrama(err);
 }
 
 function todayBR(){
