@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFS-e Error Mapping Tool — eNotas</title>
+<link rel="icon" type="image/jpeg" href="logo-enotas.jpg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="logo-slot" id="logoSlot">logo-enotas</div>
+  <h1>NFS-e Error Mapping Tool</h1>
+  <div class="spacer"></div>
+  <div class="agents-menu">
+    <button class="agents-btn" id="agentsBtn">
+      Agentes
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    </button>
+    <div class="agents-dropdown">
+      <div class="agents-dropdown-inner">
+        <div class="agents-dropdown-item" data-agent="calais">Calais</div>
+        <div class="agents-dropdown-item" data-agent="rafa">Rafa</div>
+        <div class="agents-dropdown-divider"></div>
+        <div class="agents-dropdown-item" data-agent="">Todos</div>
+      </div>
+    </div>
+  </div>
+  <div class="sync-status" id="syncStatus"><span class="sync-dot loading" id="syncDot"></span><span id="syncText">Carregando...</span></div>
+  <button class="btn-icon" id="btnHelp" title="Ajuda" aria-label="Ajuda">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"></circle><path d="M9.3 9.3a2.7 2.7 0 1 1 3.6 2.55c-.7.3-1.2.9-1.2 1.65v.5"></path><circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none"></circle></svg>
+  </button>
+  <button class="btn-icon" id="btnSaveNow" title="Salvar agora" aria-label="Salvar agora">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"></path><path d="M8 4v5h8V4"></path><path d="M8 14h8v6H8z"></path></svg>
+  </button>
+  <button class="btn-teal btn-sm" id="btnExport">Exportar JSON</button>
+  <button class="btn-primary btn-sm" id="btnNew">+ Novo Erro</button>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="progress-wrap">
+      <div id="progressLabel" style="font-size:12.5px;color:var(--text-light);">0 / 0 erros mapeados (0%)</div>
+      <div class="progress-bar"><div id="progressFill" style="width:0%"></div></div>
+    </div>
+    <div class="search"><input type="text" id="searchInput" placeholder="Buscar por código ou título..."></div>
+    <div class="group-tabs" id="groupTabs"></div>
+    <div class="filters" id="statusFilters"></div>
+    <div class="groups" id="groupsContainer"></div>
+  </aside>
+
+  <main class="main" id="mainArea">
+    <div class="empty-state">Selecione um erro na lista à esquerda, ou crie um novo.</div>
+  </main>
+</div>
+
+<div id="authOverlay">
+  <div id="authBox">
+    <h2>Acesso restrito</h2>
+    <p>Digite a senha para acessar a ferramenta</p>
+    <input id="authInput" type="password" placeholder="Senha" autofocus />
+    <button id="authBtn">Entrar</button>
+    <div id="authErr"></div>
+  </div>
+</div>
+
+<!-- HELP MODAL -->
+<div id="helpOverlay" style="display:none;">
+  <div id="helpModal">
+    <div class="help-header">
+      <h2>Ajuda — Como usar a ferramenta</h2>
+      <button class="help-close" id="helpClose">×</button>
+    </div>
+    <div class="help-stepper" id="helpStepper"></div>
+    <div class="help-body">
+      <nav class="help-sidebar">
+        <div class="help-sidebar-label">Tópicos</div>
+        <div id="helpTopicsList"></div>
+      </nav>
+      <div class="help-content" id="helpContentArea"></div>
+    </div>
+    <div class="help-footer">
+      <span class="help-counter" id="helpCounter"></span>
+      <div class="help-footer-btns">
+        <button class="btn-ghost btn-sm" id="helpPrev">‹ Anterior</button>
+        <button class="btn-primary btn-sm" id="helpNext">Próximo ›</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
