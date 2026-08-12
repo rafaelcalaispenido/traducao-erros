@@ -219,14 +219,15 @@ async function loadFromGist(){
       state = JSON.parse(file.content);
       const before = state.errors.length;
       state.errors = state.errors.filter(e => e.group !== "xml_soap");
-      if(state.errors.length !== before) await saveToGist(true);
-      state.analysts = state.analysts && state.analysts.length ? state.analysts : DEFAULT_ANALYSTS();
+      const seededAnalysts = !state.analysts || !state.analysts.length;
+      if(!state.analysts || !state.analysts.length) state.analysts = DEFAULT_ANALYSTS();
       state.groups = state.groups || [
         {key:"portal_nacional",label:"Portal Nacional"},
         {key:"abrasf",label:"ABRASF"},
         {key:"sefaz_nfe55",label:"SEFAZ NF-e 55"}
       ];
       rebuildGroupLabels();
+      if(state.errors.length !== before || seededAnalysts) await saveToGist(true);
       setSyncStatus("ok","Sincronizado");
     } else {
       state = buildSeed();
@@ -243,7 +244,7 @@ async function loadFromGist(){
     const cached = localStorage.getItem("nfse-errors-cache");
     if(cached){
       state = JSON.parse(cached);
-      state.analysts = state.analysts && state.analysts.length ? state.analysts : DEFAULT_ANALYSTS();
+      if(!state.analysts || !state.analysts.length) state.analysts = DEFAULT_ANALYSTS();
       state.groups = state.groups || [{key:"portal_nacional",label:"Portal Nacional"},{key:"abrasf",label:"ABRASF"},{key:"sefaz_nfe55",label:"SEFAZ NF-e 55"}];
       rebuildGroupLabels();
       setSyncStatus("err","Erro ao sincronizar (usando cache local)");
@@ -2877,101 +2878,100 @@ function mountRichEditor(container, html, placeholder, onChange){
 /* ================= ANALISTAS MODAL ================= */
 const ANALYST_COLORS = ["#7a1f6e","#0ea899","#2d7dd2","#dd9d1f","#dc4747","#2d6b2d"];
 
-function setupAnalystsModal(){
-  const overlay = document.getElementById("analystsOverlay");
-  const closeBtn = document.getElementById("analystsClose");
+function renderAnalysts(){
   const body = document.getElementById("analystsBody");
+  if(!body) return;
+  body.innerHTML = "";
 
-  closeBtn.onclick = () => { overlay.style.display = "none"; };
-  overlay.onclick = e => { if(e.target === overlay) overlay.style.display = "none"; };
+  const analysts = (state && state.analysts) ? state.analysts : [];
 
-  function renderAnalysts(){
-    body.innerHTML = "";
+  // List
+  const listSection = document.createElement("div");
+  listSection.className = "field";
+  const listLabel = document.createElement("label");
+  listLabel.textContent = "Agentes cadastrados";
+  listSection.appendChild(listLabel);
 
-    // List
-    const listSection = document.createElement("div");
-    listSection.className = "field";
-    listSection.innerHTML = `<label>Agentes cadastrados</label>`;
-    const list = document.createElement("div");
-    list.style.display = "flex";
-    list.style.flexDirection = "column";
-    list.style.gap = "8px";
-    list.style.marginBottom = "20px";
+  const list = document.createElement("div");
+  list.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-bottom:20px;";
 
-    if(!state.analysts.length){
-      list.innerHTML = `<div class="hint">Nenhum agente cadastrado ainda.</div>`;
-    } else {
-      state.analysts.forEach(a => {
-        const row = document.createElement("div");
-        row.style.cssText = "display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;";
-        row.innerHTML = `
-          <span style="width:14px;height:14px;border-radius:50%;background:${a.color};flex:none;display:inline-block;"></span>
-          <input type="text" value="${escapeAttr(a.name)}" style="flex:1;padding:6px 8px;font-size:13px;" data-id="${a.id}">
-          <button class="btn-ghost btn-sm btn-analyst-del" data-id="${a.id}" style="color:var(--danger);border-color:var(--danger);">Excluir</button>
-        `;
-        const nameInput = row.querySelector("input");
-        nameInput.oninput = e => {
-          const analyst = state.analysts.find(x => x.id === a.id);
-          if(analyst) analyst.name = e.target.value;
-          scheduleSave();
-          renderFilters();
-        };
-        row.querySelector(".btn-analyst-del").onclick = () => {
-          if(!confirm(`Excluir agente "${a.name}"?`)) return;
-          state.analysts = state.analysts.filter(x => x.id !== a.id);
-          state.errors.forEach(e => { if(e.assigned_to === a.id) e.assigned_to = null; });
-          scheduleSave();
-          renderSidebar();
-          renderAnalysts();
-        };
-        list.appendChild(row);
-      });
-    }
-    body.appendChild(listSection);
-    listSection.appendChild(list);
-
-    // Add form
-    const addSection = document.createElement("div");
-    addSection.innerHTML = `
-      <label class="field"><b>Adicionar agente</b></label>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <input type="text" id="newAnalystName" placeholder="Nome do agente" style="flex:1;min-width:180px;padding:8px 12px;font-size:13px;">
-        <div style="display:flex;gap:6px;align-items:center;">
-          ${ANALYST_COLORS.map((c,i) => `<label style="cursor:pointer;"><input type="radio" name="analystColor" value="${c}" ${i===0?'checked':''} style="display:none;"><span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:${c};border:3px solid transparent;" class="color-radio-dot" data-color="${c}"></span></label>`).join('')}
-        </div>
-        <button class="btn-primary btn-sm" id="btnAddAnalyst">+ Adicionar</button>
-      </div>
-    `;
-    body.appendChild(addSection);
-
-    // Color radio styling
-    body.querySelectorAll("input[name=analystColor]").forEach(radio => {
-      radio.onchange = () => {
-        body.querySelectorAll(".color-radio-dot").forEach(dot => dot.style.border = "3px solid transparent");
-        radio.nextElementSibling.style.border = "3px solid #fff";
-        radio.nextElementSibling.style.outline = "2px solid " + radio.value;
+  if(!analysts.length){
+    list.innerHTML = `<div class="hint">Nenhum agente cadastrado ainda.</div>`;
+  } else {
+    analysts.forEach(a => {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;";
+      row.innerHTML = `
+        <span style="width:14px;height:14px;border-radius:50%;background:${a.color};flex:none;display:inline-block;"></span>
+        <input type="text" value="${escapeAttr(a.name)}" style="flex:1;padding:6px 8px;font-size:13px;" data-id="${a.id}">
+        <button class="btn-ghost btn-sm btn-analyst-del" data-id="${a.id}" style="color:var(--danger);border-color:var(--danger);">Excluir</button>
+      `;
+      row.querySelector("input").oninput = ev => {
+        const analyst = state.analysts.find(x => x.id === a.id);
+        if(analyst) analyst.name = ev.target.value;
+        scheduleSave();
+        renderFilters();
       };
+      row.querySelector(".btn-analyst-del").onclick = () => {
+        if(!confirm(`Excluir agente "${a.name}"?`)) return;
+        state.analysts = state.analysts.filter(x => x.id !== a.id);
+        state.errors.forEach(e => { if(e.assigned_to === a.id) e.assigned_to = null; });
+        scheduleSave();
+        renderSidebar();
+        renderAnalysts();
+      };
+      list.appendChild(row);
     });
-    // Default selected visual
-    const defaultRadio = body.querySelector("input[name=analystColor]:checked");
-    if(defaultRadio){
-      defaultRadio.nextElementSibling.style.border = "3px solid #fff";
-      defaultRadio.nextElementSibling.style.outline = "2px solid " + defaultRadio.value;
-    }
+  }
+  listSection.appendChild(list);
+  body.appendChild(listSection);
 
-    document.getElementById("btnAddAnalyst").onclick = () => {
-      const name = document.getElementById("newAnalystName").value.trim();
-      if(!name){ alert("Informe o nome do agente."); return; }
-      const colorRadio = body.querySelector("input[name=analystColor]:checked");
-      const color = colorRadio ? colorRadio.value : ANALYST_COLORS[0];
-      const id = "a_" + Math.random().toString(36).slice(2,9);
-      state.analysts.push({ id, name, color });
-      scheduleSave();
-      renderFilters();
-      renderAnalysts();
+  // Add form
+  const addSection = document.createElement("div");
+  addSection.innerHTML = `
+    <label class="field"><b>Adicionar agente</b></label>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <input type="text" id="newAnalystName" placeholder="Nome do agente" style="flex:1;min-width:180px;padding:8px 12px;font-size:13px;">
+      <div style="display:flex;gap:6px;align-items:center;">
+        ${ANALYST_COLORS.map((c,i) => `<label style="cursor:pointer;"><input type="radio" name="analystColor" value="${c}" ${i===0?'checked':''} style="display:none;"><span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:${c};border:3px solid transparent;" class="color-radio-dot"></span></label>`).join('')}
+      </div>
+      <button class="btn-primary btn-sm" id="btnAddAnalyst">+ Adicionar</button>
+    </div>
+  `;
+  body.appendChild(addSection);
+
+  // Color radio styling
+  body.querySelectorAll("input[name=analystColor]").forEach(radio => {
+    radio.onchange = () => {
+      body.querySelectorAll(".color-radio-dot").forEach(dot => dot.style.border = "3px solid transparent");
+      radio.nextElementSibling.style.border = "3px solid #fff";
+      radio.nextElementSibling.style.outline = "2px solid " + radio.value;
     };
+  });
+  const defaultRadio = body.querySelector("input[name=analystColor]:checked");
+  if(defaultRadio){
+    defaultRadio.nextElementSibling.style.border = "3px solid #fff";
+    defaultRadio.nextElementSibling.style.outline = "2px solid " + defaultRadio.value;
   }
 
+  document.getElementById("btnAddAnalyst").onclick = () => {
+    const name = (document.getElementById("newAnalystName").value || "").trim();
+    if(!name){ alert("Informe o nome do agente."); return; }
+    const colorRadio = body.querySelector("input[name=analystColor]:checked");
+    const color = colorRadio ? colorRadio.value : ANALYST_COLORS[0];
+    const id = "a_" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+    if(!state.analysts) state.analysts = [];
+    state.analysts.push({ id, name, color });
+    scheduleSave();
+    renderFilters();
+    renderAnalysts();
+  };
+}
+
+function setupAnalystsModal(){
+  const overlay = document.getElementById("analystsOverlay");
+  document.getElementById("analystsClose").onclick = () => { overlay.style.display = "none"; };
+  overlay.onclick = e => { if(e.target === overlay) overlay.style.display = "none"; };
   document.getElementById("btnAnalysts").onclick = () => {
     overlay.style.display = "flex";
     renderAnalysts();
