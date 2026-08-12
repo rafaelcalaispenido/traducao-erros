@@ -175,6 +175,13 @@ const ICONS = {
   refresh:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
 };
 
+function DEFAULT_ANALYSTS(){
+  return [
+    { id:"calais", name:"Calais", color:"#7a1f6e" },
+    { id:"rafa",   name:"Rafa",   color:"#2560b8" }
+  ];
+}
+
 let GROUP_LABELS = { portal_nacional:"Portal Nacional", abrasf:"ABRASF", sefaz_nfe55:"SEFAZ NF-e 55" };
 function rebuildGroupLabels(){
   if(state && state.groups && state.groups.length){
@@ -213,7 +220,7 @@ async function loadFromGist(){
       const before = state.errors.length;
       state.errors = state.errors.filter(e => e.group !== "xml_soap");
       if(state.errors.length !== before) await saveToGist(true);
-      state.analysts = state.analysts || [];
+      state.analysts = state.analysts && state.analysts.length ? state.analysts : DEFAULT_ANALYSTS();
       state.groups = state.groups || [
         {key:"portal_nacional",label:"Portal Nacional"},
         {key:"abrasf",label:"ABRASF"},
@@ -223,7 +230,7 @@ async function loadFromGist(){
       setSyncStatus("ok","Sincronizado");
     } else {
       state = buildSeed();
-      state.analysts = [];
+      state.analysts = DEFAULT_ANALYSTS();
       state.groups = [
         {key:"portal_nacional",label:"Portal Nacional"},
         {key:"abrasf",label:"ABRASF"},
@@ -236,13 +243,13 @@ async function loadFromGist(){
     const cached = localStorage.getItem("nfse-errors-cache");
     if(cached){
       state = JSON.parse(cached);
-      state.analysts = state.analysts || [];
+      state.analysts = state.analysts && state.analysts.length ? state.analysts : DEFAULT_ANALYSTS();
       state.groups = state.groups || [{key:"portal_nacional",label:"Portal Nacional"},{key:"abrasf",label:"ABRASF"},{key:"sefaz_nfe55",label:"SEFAZ NF-e 55"}];
       rebuildGroupLabels();
       setSyncStatus("err","Erro ao sincronizar (usando cache local)");
     } else {
       state = buildSeed();
-      state.analysts = [];
+      state.analysts = DEFAULT_ANALYSTS();
       state.groups = [{key:"portal_nacional",label:"Portal Nacional"},{key:"abrasf",label:"ABRASF"},{key:"sefaz_nfe55",label:"SEFAZ NF-e 55"}];
       setSyncStatus("err","Erro ao sincronizar (dados de seed locais)");
     }
