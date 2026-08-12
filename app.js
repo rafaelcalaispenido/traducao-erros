@@ -162,7 +162,13 @@ function buildSeed(){
   return { version:"1.0", exported_at:new Date().toISOString(), errors };
 }
 
-const GROUP_LABELS = { portal_nacional:"Portal Nacional", abrasf:"ABRASF", sefaz_nfe55:"SEFAZ NF-e 55" };
+let GROUP_LABELS = { portal_nacional:"Portal Nacional", abrasf:"ABRASF", sefaz_nfe55:"SEFAZ NF-e 55" };
+function rebuildGroupLabels(){
+  if(state && state.groups && state.groups.length){
+    GROUP_LABELS = {};
+    state.groups.forEach(g => { GROUP_LABELS[g.key] = g.label; });
+  }
+}
 const STATUS_LABELS = { nao_mapeado:"Não mapeado", em_revisao:"Em revisão", pronto:"Pronto" };
 
 /* ================= ESTADO ================= */
@@ -172,6 +178,7 @@ let saveTimer = null;
 let lastSavedAt = null;
 let isSaving = false;
 let statusFilter = new Set();
+let analystFilter = ""; // "" = todos, or analyst id
 
 function setSyncStatus(kind, text){
   const dot = document.getElementById("syncDot");
@@ -193,9 +200,22 @@ async function loadFromGist(){
       const before = state.errors.length;
       state.errors = state.errors.filter(e => e.group !== "xml_soap");
       if(state.errors.length !== before) await saveToGist(true);
+      state.analysts = state.analysts || [];
+      state.groups = state.groups || [
+        {key:"portal_nacional",label:"Portal Nacional"},
+        {key:"abrasf",label:"ABRASF"},
+        {key:"sefaz_nfe55",label:"SEFAZ NF-e 55"}
+      ];
+      rebuildGroupLabels();
       setSyncStatus("ok","Sincronizado");
     } else {
       state = buildSeed();
+      state.analysts = [];
+      state.groups = [
+        {key:"portal_nacional",label:"Portal Nacional"},
+        {key:"abrasf",label:"ABRASF"},
+        {key:"sefaz_nfe55",label:"SEFAZ NF-e 55"}
+      ];
       await saveToGist(true);
     }
   } catch(err){
@@ -203,9 +223,14 @@ async function loadFromGist(){
     const cached = localStorage.getItem("nfse-errors-cache");
     if(cached){
       state = JSON.parse(cached);
+      state.analysts = state.analysts || [];
+      state.groups = state.groups || [{key:"portal_nacional",label:"Portal Nacional"},{key:"abrasf",label:"ABRASF"},{key:"sefaz_nfe55",label:"SEFAZ NF-e 55"}];
+      rebuildGroupLabels();
       setSyncStatus("err","Erro ao sincronizar (usando cache local)");
     } else {
       state = buildSeed();
+      state.analysts = [];
+      state.groups = [{key:"portal_nacional",label:"Portal Nacional"},{key:"abrasf",label:"ABRASF"},{key:"sefaz_nfe55",label:"SEFAZ NF-e 55"}];
       setSyncStatus("err","Erro ao sincronizar (dados de seed locais)");
     }
   }
@@ -258,12 +283,25 @@ function renderProgress(){
 
 function renderFilters(){
   const statusBox = document.getElementById("statusFilters");
-  statusBox.innerHTML = Object.entries(STATUS_LABELS).map(([k,v]) =>
+  let html = Object.entries(STATUS_LABELS).map(([k,v]) =>
     `<span class="chip ${statusFilter.has(k)?'active':''}" data-status="${k}">${v}</span>`
   ).join('');
-  statusBox.querySelectorAll(".chip").forEach(chip => chip.onclick = () => {
+  // Analyst filter
+  if(state && state.analysts && state.analysts.length){
+    html += `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;margin-left:4px;color:var(--text-light);">Analista:</span>`;
+    html += `<span class="chip ${analystFilter===''?'active':''}" data-analyst="">Todos</span>`;
+    state.analysts.forEach(a => {
+      html += `<span class="chip ${analystFilter===a.id?'active':''}" data-analyst="${a.id}" style="${analystFilter===a.id?'':''}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.color};margin-right:4px;vertical-align:middle;"></span>${escapeHtml(a.name)}</span>`;
+    });
+  }
+  statusBox.innerHTML = html;
+  statusBox.querySelectorAll(".chip[data-status]").forEach(chip => chip.onclick = () => {
     const k = chip.dataset.status;
     statusFilter.has(k) ? statusFilter.delete(k) : statusFilter.add(k);
+    renderSidebar();
+  });
+  statusBox.querySelectorAll(".chip[data-analyst]").forEach(chip => chip.onclick = () => {
+    analystFilter = chip.dataset.analyst;
     renderSidebar();
   });
 }
@@ -315,7 +353,8 @@ function renderGroupTabs(){
     const count = state.errors.filter(e => e.group === key &&
       (e.code.toLowerCase().includes(term) || (e.client_facing.title||"").toLowerCase().includes(term)) &&
       (statusFilter.size === 0 || statusFilter.has(e.status)) &&
-      (!agentCodes || agentCodes.has(e.code))
+      (!agentCodes || agentCodes.has(e.code)) &&
+      (analystFilter === "" || e.assigned_to === analystFilter)
     ).length;
     if(count === 0) continue;
     const tab = document.createElement("span");
@@ -328,7 +367,8 @@ function renderGroupTabs(){
     state.errors.some(e => e.group === k &&
       (e.code.toLowerCase().includes(term) || (e.client_facing.title||"").toLowerCase().includes(term)) &&
       (statusFilter.size === 0 || statusFilter.has(e.status)) &&
-      (!agentCodes || agentCodes.has(e.code))
+      (!agentCodes || agentCodes.has(e.code)) &&
+      (analystFilter === "" || e.assigned_to === analystFilter)
     )
   );
   if(available.length && !available.includes(activeGroup)) activeGroup = available[0];
@@ -344,12 +384,15 @@ function renderSidebar(){
   const items = state.errors.filter(e => e.group === activeGroup &&
     (e.code.toLowerCase().includes(term) || (e.client_facing.title||"").toLowerCase().includes(term)) &&
     (statusFilter.size === 0 || statusFilter.has(e.status)) &&
-    (!agentCodes || agentCodes.has(e.code))
+    (!agentCodes || agentCodes.has(e.code)) &&
+    (analystFilter === "" || e.assigned_to === analystFilter)
   );
   for(const e of items){
     const row = document.createElement("div");
     row.className = "error-item" + (e.code === selectedCode ? " active" : "");
-    row.innerHTML = `<span class="badge ${e.status}"></span><span class="code">${escapeHtml(e.code)}</span><span class="title">${escapeHtml(e.client_facing.title || e.original_message)}</span>`;
+    const analyst = e.assigned_to && state.analysts ? state.analysts.find(a => a.id === e.assigned_to) : null;
+    const analystDot = analyst ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${analyst.color};flex:none;" title="${escapeHtml(analyst.name)}"></span>` : '';
+    row.innerHTML = `<span class="badge ${e.status}"></span><span class="code">${escapeHtml(e.code)}</span><span class="title">${escapeHtml(e.client_facing.title || e.original_message)}</span>${analystDot}`;
     row.onclick = () => { selectedCode = e.code; viewMode = "errors"; setHash(activeTab); render(); };
     container.appendChild(row);
   }
@@ -424,13 +467,23 @@ function renderTabIdentificacao(err){
         <label>Código do erro *</label>
         <input type="text" id="f_code" value="${escapeAttr(err.code)}">
       </div>
-      <div class="field" style="flex:none;align-self:flex-end;margin-bottom:16px;">
+      <div class="field" style="flex:none;align-self:flex-end;margin-bottom:16px;display:flex;gap:8px;">
         <button class="btn-ghost btn-sm" id="btnDuplicate" type="button">Duplicar erro</button>
+        <button class="btn-danger btn-sm" id="btnDeleteError" type="button">🗑 Excluir erro</button>
       </div>
       <div class="field">
         <label>Grupo</label>
         <select id="f_group">
           ${Object.entries(GROUP_LABELS).map(([k,v]) => `<option value="${k}" ${err.group===k?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Responsável</label>
+        <select id="f_assigned_to">
+          <option value="" ${!err.assigned_to?'selected':''}>— Não atribuído —</option>
+          ${(state.analysts||[]).map(a => `<option value="${escapeAttr(a.id)}" ${err.assigned_to===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}
         </select>
       </div>
     </div>
@@ -455,6 +508,15 @@ function renderTabIdentificacao(err){
   document.getElementById("f_code").onchange = e => { err.code = e.target.value; selectedCode = err.code; fieldChanged(); };
   document.getElementById("f_group").onchange = e => { err.group = e.target.value; fieldChanged(); };
   document.getElementById("f_requires_prefecture").onchange = e => { err.requires_prefecture = e.target.checked; fieldChanged(); };
+  document.getElementById("f_assigned_to").onchange = e => { err.assigned_to = e.target.value || null; fieldChanged(); renderSidebar(); };
+  document.getElementById("btnDeleteError").onclick = () => {
+    if(!confirm(`Tem certeza que deseja excluir o erro ${err.code}? Esta ação não pode ser desfeita.`)) return;
+    const idx = state.errors.findIndex(e => e.code === err.code);
+    if(idx !== -1) state.errors.splice(idx, 1);
+    selectedCode = null;
+    saveToGist(false);
+    render();
+  };
   const patInput = document.getElementById("f_pattern_new");
   patInput.onkeydown = e => {
     if(e.key === "Enter" && patInput.value.trim()){
@@ -2792,8 +2854,362 @@ function mountRichEditor(container, html, placeholder, onChange){
   return content;
 }
 
+/* ================= ANALISTAS MODAL ================= */
+const ANALYST_COLORS = ["#7a1f6e","#0ea899","#2d7dd2","#dd9d1f","#dc4747","#2d6b2d"];
+
+function setupAnalystsModal(){
+  const overlay = document.getElementById("analystsOverlay");
+  const closeBtn = document.getElementById("analystsClose");
+  const body = document.getElementById("analystsBody");
+
+  closeBtn.onclick = () => { overlay.style.display = "none"; };
+  overlay.onclick = e => { if(e.target === overlay) overlay.style.display = "none"; };
+
+  function renderAnalysts(){
+    body.innerHTML = "";
+
+    // List
+    const listSection = document.createElement("div");
+    listSection.className = "field";
+    listSection.innerHTML = `<label>Analistas cadastrados</label>`;
+    const list = document.createElement("div");
+    list.style.display = "flex";
+    list.style.flexDirection = "column";
+    list.style.gap = "8px";
+    list.style.marginBottom = "20px";
+
+    if(!state.analysts.length){
+      list.innerHTML = `<div class="hint">Nenhum analista cadastrado ainda.</div>`;
+    } else {
+      state.analysts.forEach(a => {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;";
+        row.innerHTML = `
+          <span style="width:14px;height:14px;border-radius:50%;background:${a.color};flex:none;display:inline-block;"></span>
+          <input type="text" value="${escapeAttr(a.name)}" style="flex:1;padding:6px 8px;font-size:13px;" data-id="${a.id}">
+          <button class="btn-ghost btn-sm btn-analyst-del" data-id="${a.id}" style="color:var(--danger);border-color:var(--danger);">Excluir</button>
+        `;
+        const nameInput = row.querySelector("input");
+        nameInput.oninput = e => {
+          const analyst = state.analysts.find(x => x.id === a.id);
+          if(analyst) analyst.name = e.target.value;
+          scheduleSave();
+          renderFilters();
+        };
+        row.querySelector(".btn-analyst-del").onclick = () => {
+          if(!confirm(`Excluir analista "${a.name}"?`)) return;
+          state.analysts = state.analysts.filter(x => x.id !== a.id);
+          state.errors.forEach(e => { if(e.assigned_to === a.id) e.assigned_to = null; });
+          scheduleSave();
+          renderSidebar();
+          renderAnalysts();
+        };
+        list.appendChild(row);
+      });
+    }
+    body.appendChild(listSection);
+    listSection.appendChild(list);
+
+    // Add form
+    const addSection = document.createElement("div");
+    addSection.innerHTML = `
+      <label class="field"><b>Adicionar analista</b></label>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <input type="text" id="newAnalystName" placeholder="Nome do analista" style="flex:1;min-width:180px;padding:8px 12px;font-size:13px;">
+        <div style="display:flex;gap:6px;align-items:center;">
+          ${ANALYST_COLORS.map((c,i) => `<label style="cursor:pointer;"><input type="radio" name="analystColor" value="${c}" ${i===0?'checked':''} style="display:none;"><span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:${c};border:3px solid transparent;" class="color-radio-dot" data-color="${c}"></span></label>`).join('')}
+        </div>
+        <button class="btn-primary btn-sm" id="btnAddAnalyst">+ Adicionar</button>
+      </div>
+    `;
+    body.appendChild(addSection);
+
+    // Color radio styling
+    body.querySelectorAll("input[name=analystColor]").forEach(radio => {
+      radio.onchange = () => {
+        body.querySelectorAll(".color-radio-dot").forEach(dot => dot.style.border = "3px solid transparent");
+        radio.nextElementSibling.style.border = "3px solid #fff";
+        radio.nextElementSibling.style.outline = "2px solid " + radio.value;
+      };
+    });
+    // Default selected visual
+    const defaultRadio = body.querySelector("input[name=analystColor]:checked");
+    if(defaultRadio){
+      defaultRadio.nextElementSibling.style.border = "3px solid #fff";
+      defaultRadio.nextElementSibling.style.outline = "2px solid " + defaultRadio.value;
+    }
+
+    document.getElementById("btnAddAnalyst").onclick = () => {
+      const name = document.getElementById("newAnalystName").value.trim();
+      if(!name){ alert("Informe o nome do analista."); return; }
+      const colorRadio = body.querySelector("input[name=analystColor]:checked");
+      const color = colorRadio ? colorRadio.value : ANALYST_COLORS[0];
+      const id = "a_" + Math.random().toString(36).slice(2,9);
+      state.analysts.push({ id, name, color });
+      scheduleSave();
+      renderFilters();
+      renderAnalysts();
+    };
+  }
+
+  document.getElementById("btnAnalysts").onclick = () => {
+    overlay.style.display = "flex";
+    renderAnalysts();
+  };
+}
+
+/* ================= DASHBOARD MODAL ================= */
+function setupDashboardModal(){
+  const overlay = document.getElementById("dashboardOverlay");
+  const closeBtn = document.getElementById("dashboardClose");
+  const body = document.getElementById("dashboardBody");
+
+  closeBtn.onclick = () => { overlay.style.display = "none"; };
+  overlay.onclick = e => { if(e.target === overlay) overlay.style.display = "none"; };
+
+  function renderDashboard(){
+    const errors = state.errors;
+    const total = errors.length;
+    const done = errors.filter(e => e.status === "pronto").length;
+    const pct = total ? Math.round(done/total*100) : 0;
+
+    let html = `
+      <div class="field">
+        <label>Progresso geral</label>
+        <div style="font-size:14px;margin-bottom:6px;">${done} de ${total} erros mapeados (${pct}%)</div>
+        <div class="progress-bar" style="height:12px;"><div style="width:${pct}%;height:100%;background:var(--teal);border-radius:3px;transition:width .3s;"></div></div>
+      </div>
+      <div class="field">
+        <label>Progresso por grupo</label>
+        <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="background:#f7f8fa;">
+              <th style="text-align:left;padding:8px 12px;border:1px solid var(--border);">Grupo</th>
+              <th style="padding:8px 12px;border:1px solid var(--border);color:var(--danger);">Não mapeado</th>
+              <th style="padding:8px 12px;border:1px solid var(--border);color:var(--warn);">Em revisão</th>
+              <th style="padding:8px 12px;border:1px solid var(--border);color:var(--ok);">Pronto</th>
+              <th style="padding:8px 12px;border:1px solid var(--border);">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+    Object.entries(GROUP_LABELS).forEach(([key, label]) => {
+      const groupErrs = errors.filter(e => e.group === key);
+      const nm = groupErrs.filter(e => e.status === "nao_mapeado").length;
+      const er = groupErrs.filter(e => e.status === "em_revisao").length;
+      const pr = groupErrs.filter(e => e.status === "pronto").length;
+      html += `<tr>
+        <td style="padding:8px 12px;border:1px solid var(--border);font-weight:600;">${escapeHtml(label)}</td>
+        <td style="text-align:center;padding:8px 12px;border:1px solid var(--border);">${nm}</td>
+        <td style="text-align:center;padding:8px 12px;border:1px solid var(--border);">${er}</td>
+        <td style="text-align:center;padding:8px 12px;border:1px solid var(--border);">${pr}</td>
+        <td style="text-align:center;padding:8px 12px;border:1px solid var(--border);font-weight:600;">${groupErrs.length}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div></div>`;
+
+    // Per-analyst section
+    if(state.analysts && state.analysts.length){
+      html += `<div class="field"><label>Por analista</label><div style="display:flex;flex-direction:column;gap:8px;">`;
+      state.analysts.forEach(a => {
+        const assigned = errors.filter(e => e.assigned_to === a.id);
+        const analystDone = assigned.filter(e => e.status === "pronto").length;
+        const analystPct = assigned.length ? Math.round(analystDone/assigned.length*100) : 0;
+        html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:#fff;">
+          <span style="width:12px;height:12px;border-radius:50%;background:${a.color};flex:none;"></span>
+          <span style="font-weight:600;min-width:120px;">${escapeHtml(a.name)}</span>
+          <span style="color:var(--text-light);font-size:12.5px;">${assigned.length} atribuídos</span>
+          <span style="color:var(--ok);font-size:12.5px;">${analystDone} prontos</span>
+          <div style="flex:1;height:8px;background:#eef1f3;border-radius:3px;overflow:hidden;">
+            <div style="width:${analystPct}%;height:100%;background:${a.color};transition:width .3s;"></div>
+          </div>
+          <span style="font-size:12px;color:var(--text-light);min-width:36px;text-align:right;">${analystPct}%</span>
+        </div>`;
+      });
+      html += `</div></div>`;
+    } else {
+      html += `<div class="hint">Nenhum analista cadastrado. Use o botão 👥 Analistas para adicionar.</div>`;
+    }
+
+    body.innerHTML = html;
+  }
+
+  document.getElementById("btnDashboard").onclick = () => {
+    overlay.style.display = "flex";
+    renderDashboard();
+  };
+}
+
+/* ================= ADMIN MODAL ================= */
+async function encryptToken(token, password){
+  const saltArr = crypto.getRandomValues(new Uint8Array(16));
+  const ivArr = crypto.getRandomValues(new Uint8Array(12));
+  const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey(
+    { name:"PBKDF2", salt:saltArr, iterations:100000, hash:"SHA-256" },
+    keyMaterial, { name:"AES-GCM", length:256 }, false, ["encrypt"]
+  );
+  const encrypted = await crypto.subtle.encrypt({ name:"AES-GCM", iv:ivArr }, key, new TextEncoder().encode(token));
+  const toHex = arr => Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
+  return { salt: toHex(saltArr), iv: toHex(ivArr), data: toHex(new Uint8Array(encrypted)) };
+}
+
+function setupAdminModal(){
+  const overlay = document.getElementById("adminOverlay");
+  const closeBtn = document.getElementById("adminClose");
+  const body = document.getElementById("adminBody");
+
+  closeBtn.onclick = () => { overlay.style.display = "none"; };
+  overlay.onclick = e => { if(e.target === overlay) overlay.style.display = "none"; };
+
+  function renderAdmin(){
+    body.innerHTML = `
+      <!-- 4a: Groups -->
+      <div class="section-title" style="margin-top:0;">4a. Gerenciar grupos de erro</div>
+      <div id="adminGroupsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:24px;">
+        <input type="text" id="adminNewGroupLabel" placeholder="Nome do novo grupo" style="flex:1;">
+        <button class="btn-primary btn-sm" id="btnAdminAddGroup">+ Adicionar grupo</button>
+      </div>
+
+      <!-- 4b: Token rotation -->
+      <div class="section-title">4b. Rotação de token GitHub</div>
+      <div class="field">
+        <label>Novo token GitHub</label>
+        <input type="text" id="adminNewToken" placeholder="ghp_...">
+      </div>
+      <div class="field">
+        <label>Senha atual (para criptografar)</label>
+        <input type="password" id="adminTokenPassword" placeholder="Senha de acesso">
+      </div>
+      <button class="btn-primary btn-sm" id="btnAdminEncryptToken">Criptografar e salvar na sessão</button>
+      <div id="adminTokenResult" style="margin-top:12px;"></div>
+
+      <!-- 4c: Change password -->
+      <div class="section-title" style="margin-top:24px;">4c. Alterar senha de acesso</div>
+      <div class="hint" style="margin-bottom:12px;">Atenção: após gerar os novos valores _ENC, você precisará atualizar o código-fonte do app.js com os novos dados.</div>
+      <div class="field"><label>Senha atual</label><input type="password" id="adminOldPassword" placeholder="Senha atual"></div>
+      <div class="field"><label>Nova senha</label><input type="password" id="adminNewPassword" placeholder="Nova senha"></div>
+      <div class="field"><label>Confirmar nova senha</label><input type="password" id="adminConfirmPassword" placeholder="Confirmar nova senha"></div>
+      <button class="btn-primary btn-sm" id="btnAdminChangePassword">Gerar novos valores _ENC</button>
+      <div id="adminPasswordResult" style="margin-top:12px;"></div>
+    `;
+
+    // Render groups
+    function renderGroupsList(){
+      const gl = document.getElementById("adminGroupsList");
+      gl.innerHTML = "";
+      (state.groups||[]).forEach(g => {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;";
+        row.innerHTML = `
+          <input type="text" value="${escapeAttr(g.label)}" style="flex:1;padding:6px 8px;font-size:13px;">
+          <span style="font-size:11.5px;color:var(--text-light);">[${escapeHtml(g.key)}]</span>
+          <button class="btn-ghost btn-sm" style="color:var(--danger);border-color:var(--danger);" data-key="${g.key}">Excluir</button>
+        `;
+        const inp = row.querySelector("input");
+        inp.oninput = e => {
+          g.label = e.target.value;
+          rebuildGroupLabels();
+          scheduleSave();
+          renderGroupTabs();
+        };
+        row.querySelector("button").onclick = () => {
+          const inUse = state.errors.some(e => e.group === g.key);
+          if(inUse){
+            if(!confirm(`Existem erros neste grupo ("${g.label}"). Excluir mesmo assim? Os erros continuarão no sistema mas sem grupo.`)) return;
+          } else {
+            if(!confirm(`Excluir grupo "${g.label}"?`)) return;
+          }
+          state.groups = state.groups.filter(x => x.key !== g.key);
+          rebuildGroupLabels();
+          scheduleSave();
+          renderGroupsList();
+          renderSidebar();
+        };
+        gl.appendChild(row);
+      });
+    }
+    renderGroupsList();
+
+    document.getElementById("btnAdminAddGroup").onclick = () => {
+      const label = document.getElementById("adminNewGroupLabel").value.trim();
+      if(!label){ alert("Informe o nome do grupo."); return; }
+      const key = label.toLowerCase()
+        .normalize("NFD").replace(/[̀-ͯ]/g,'')
+        .replace(/[^a-z0-9]+/g,'_')
+        .replace(/^_|_$/g,'');
+      if(state.groups.some(g => g.key === key)){ alert("Já existe um grupo com este nome."); return; }
+      state.groups.push({ key, label });
+      rebuildGroupLabels();
+      document.getElementById("adminNewGroupLabel").value = "";
+      scheduleSave();
+      renderGroupsList();
+      renderGroupTabs();
+    };
+
+    // Token rotation
+    document.getElementById("btnAdminEncryptToken").onclick = async () => {
+      const token = document.getElementById("adminNewToken").value.trim();
+      const password = document.getElementById("adminTokenPassword").value;
+      if(!token || !password){ alert("Preencha o token e a senha."); return; }
+      const result = document.getElementById("adminTokenResult");
+      result.innerHTML = `<span class="hint">Criptografando...</span>`;
+      try {
+        const enc = await encryptToken(token, password);
+        _token = token; // update in-memory token
+        result.innerHTML = `
+          <div class="hint" style="color:var(--ok);margin-bottom:6px;">✓ Token atualizado na sessão atual.</div>
+          <div class="hint" style="margin-bottom:4px;">Para tornar permanente, atualize o arquivo app.js com:</div>
+          <pre style="background:#1e2630;color:#cfe8df;padding:12px;border-radius:6px;font-size:12px;white-space:pre-wrap;overflow-x:auto;">const _ENC = ${escapeHtml(JSON.stringify(enc, null, 2))};</pre>
+        `;
+      } catch(e) {
+        result.innerHTML = `<span style="color:var(--danger);">Erro: ${escapeHtml(e.message)}</span>`;
+      }
+    };
+
+    // Change password
+    document.getElementById("btnAdminChangePassword").onclick = async () => {
+      const oldPwd = document.getElementById("adminOldPassword").value;
+      const newPwd = document.getElementById("adminNewPassword").value;
+      const confirmPwd = document.getElementById("adminConfirmPassword").value;
+      const result = document.getElementById("adminPasswordResult");
+      if(newPwd !== confirmPwd){ result.innerHTML = `<span style="color:var(--danger);">As senhas não coincidem.</span>`; return; }
+      if(!newPwd){ result.innerHTML = `<span style="color:var(--danger);">Informe a nova senha.</span>`; return; }
+      result.innerHTML = `<span class="hint">Processando...</span>`;
+      try {
+        const token = await decryptToken(oldPwd);
+        const enc = await encryptToken(token, newPwd);
+        result.innerHTML = `
+          <div class="hint" style="color:var(--ok);margin-bottom:6px;">✓ Novos valores gerados. Atualize o app.js:</div>
+          <pre style="background:#1e2630;color:#cfe8df;padding:12px;border-radius:6px;font-size:12px;white-space:pre-wrap;overflow-x:auto;">const _ENC = ${escapeHtml(JSON.stringify(enc, null, 2))};</pre>
+          <div class="hint" style="margin-top:6px;color:var(--warn);">⚠ A sessão atual continua com a senha antiga até você recarregar a página com o código atualizado.</div>
+        `;
+      } catch(e) {
+        result.innerHTML = `<span style="color:var(--danger);">Senha atual incorreta.</span>`;
+      }
+    };
+  }
+
+  document.getElementById("btnAdmin").onclick = () => {
+    const pwd = prompt("Senha de administrador:");
+    if(!pwd) return;
+    // validate by attempting decrypt
+    decryptToken(pwd).then(() => {
+      overlay.style.display = "flex";
+      renderAdmin();
+    }).catch(() => {
+      alert("Senha incorreta.");
+    });
+  };
+}
+
 /* ================= INIT ================= */
 setupHelpModal();
+setupAnalystsModal();
+setupDashboardModal();
+setupAdminModal();
 
 (function setupAuth(){
   const overlay = document.getElementById("authOverlay");
