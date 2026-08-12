@@ -162,6 +162,19 @@ function buildSeed(){
   return { version:"1.0", exported_at:new Date().toISOString(), errors };
 }
 
+/* ================= SVG ICONS ================= */
+const ICONS = {
+  trash:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`,
+  calendar: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+  chat:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+  check:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+  edit:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+  list:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
+  question: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  textEdit: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>`,
+  refresh:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
+};
+
 let GROUP_LABELS = { portal_nacional:"Portal Nacional", abrasf:"ABRASF", sefaz_nfe55:"SEFAZ NF-e 55" };
 function rebuildGroupLabels(){
   if(state && state.groups && state.groups.length){
@@ -469,7 +482,7 @@ function renderTabIdentificacao(err){
       </div>
       <div class="field" style="flex:none;align-self:flex-end;margin-bottom:16px;display:flex;gap:8px;">
         <button class="btn-ghost btn-sm" id="btnDuplicate" type="button">Duplicar erro</button>
-        <button class="btn-danger btn-sm" id="btnDeleteError" type="button">🗑 Excluir erro</button>
+        <button class="btn-danger btn-sm" id="btnDeleteError" type="button">${ICONS.trash} Excluir erro</button>
       </div>
       <div class="field">
         <label>Grupo</label>
@@ -714,12 +727,12 @@ const HELP_PAGES = [
       <ul>
         <li><b>Arrastar caixas:</b> reorganize livremente clicando e arrastando qualquer caixa.</li>
         <li><b>Ligar etapas:</b> arraste a bolinha de saída de uma etapa até outra caixa para criar ou alterar a conexão.</li>
-        <li><b>Editar etapa:</b> clique no ícone ✎ para abrir a etapa na Aba 3 e editar o conteúdo.</li>
+        <li><b>Editar etapa:</b> clique no ícone de edição (lápis) para abrir a etapa na Aba 3 e editar o conteúdo.</li>
         <li><b>Excluir etapa:</b> clique em × na caixa (com confirmação).</li>
       </ul>
       <div class="help-section">VISÃO DE CAMINHOS</div>
       <ul>
-        <li>Clique em <b>⟳ Reorganizar layout</b> para ver cada caminho possível do fluxo como uma coluna independente — sem linhas cruzadas, facilitando a leitura.</li>
+        <li>Clique em <b>Reorganizar layout</b> para ver cada caminho possível do fluxo como uma coluna independente — sem linhas cruzadas, facilitando a leitura.</li>
         <li>Use <b>← Voltar ao editor</b> para retornar ao canvas interativo.</li>
       </ul>
       <div class="help-tip"><b>Dica:</b> alterações de conexão feitas no diagrama também atualizam o fluxo da Aba 3 automaticamente.</div>
@@ -984,7 +997,7 @@ function renderTabAgente(err){
         <div class="preview-card">
           <div class="section-title" style="margin-top:0;">Pré-visualização do fluxo</div>
           <div id="flowPreviewBox" class="system-prompt-box" style="font-family:inherit;white-space:normal;"></div>
-          <button class="btn-teal btn-sm" id="btnSimulateBot" style="margin-top:10px;">🤖 Simular bot</button>
+          <button class="btn-teal btn-sm" id="btnSimulateBot" style="margin-top:10px;">Simular bot</button>
           <details style="margin-top:14px;">
             <summary style="cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text-light);">Ver system prompt (avançado)</summary>
             <div class="system-prompt-box" id="systemPromptBox" style="margin-top:8px;"></div>
@@ -1475,10 +1488,10 @@ function autoLayoutDiagram(err){
 }
 
 function diagramBranchIcon(step){
-  if(step.type === "periodo") return "📅";
-  if(step.response_type === "texto_livre") return "✏️";
-  if(step.response_type === "sim_nao") return "❓";
-  return "☰";
+  if(step.type === "periodo") return ICONS.calendar;
+  if(step.response_type === "texto_livre") return ICONS.textEdit;
+  if(step.response_type === "sim_nao") return ICONS.question;
+  return ICONS.list;
 }
 
 function diagramAfterSummary(after){
@@ -1502,7 +1515,7 @@ function renderTabDiagrama(err){
   const maxY = allY.length ? Math.max(...allY) : 400;
 
   p.innerHTML = `
-    <div class="hint" style="margin-bottom:10px;">Arraste as caixas para reorganizar. Para ligar um destino: arraste a bolinha de saída até a etapa desejada (ela fica destacada enquanto você arrasta), ou clique na bolinha uma vez para "armar" a conexão e depois clique na etapa de destino (Esc cancela; clique na bolinha de novo para escolher "mensagem final"/"aplicar correção"). Use ✎ para editar o texto na aba 3, × para excluir.</div>
+    <div class="hint" style="margin-bottom:10px;">Arraste as caixas para reorganizar. Para ligar um destino: arraste a bolinha de saída até a etapa desejada, ou clique na bolinha para "armar" a conexão e depois clique na etapa de destino (Esc cancela). Use o ícone de edição para abrir a etapa na aba 3, e o × para excluir a etapa.</div>
     <div class="diagram-legend">
       <span class="lg-item"><span class="lg-dot" style="background:#7a1f6e;"></span> Pergunta</span>
       <span class="lg-item"><span class="lg-dot" style="background:#2560b8;"></span> Período</span>
@@ -1511,7 +1524,7 @@ function renderTabDiagrama(err){
     </div>
     <button class="btn-ghost btn-sm" id="btnDiagAddQuestion">+ Pergunta</button>
     <button class="btn-ghost btn-sm" id="btnDiagAddPeriodo" style="margin-left:6px;">+ Período (calendário)</button>
-    <button class="btn-ghost btn-sm" id="btnDiagAutoLayout" style="margin-left:16px;border-color:var(--teal);color:var(--teal);" title="Reorganiza automaticamente todas as caixas">⟳ Reorganizar layout</button>
+    <button class="btn-ghost btn-sm" id="btnDiagAutoLayout" style="margin-left:16px;border-color:var(--teal);color:var(--teal);" title="Reorganiza automaticamente todas as caixas"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:4px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Reorganizar layout</button>
     <div id="diagramCanvasWrap" style="position:relative;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-top:10px;height:600px;background-color:var(--bg-soft);background-image:radial-gradient(circle,#d8dee2 1px,transparent 1px);background-size:18px 18px;">
       <div id="diagramCanvas" style="position:relative;width:${maxX+260}px;height:${maxY+200}px;">
         <svg id="diagramSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:10;">
@@ -1920,7 +1933,7 @@ function renderTabDiagrama(err){
     box.style.left = pos.x + "px";
     box.style.top = pos.y + "px";
     box.style.borderStyle = "dashed";
-    const icon = branch.after.kind === "apply_correction" ? "✅" : "💬";
+    const icon = branch.after.kind === "apply_correction" ? ICONS.check : ICONS.chat;
     const text = htmlToText(branch.after.text);
     box.innerHTML = `
       <div class="db-head">
@@ -1972,7 +1985,7 @@ function renderTabDiagrama(err){
     const text = htmlToText(step.text);
     let preview;
     if(step.type === "periodo"){
-      preview = (text ? text + " — " : "") + "📅 Abre o calendário no chat para o cliente escolher a data inicial e final.";
+      preview = (text ? text + " — " : "") + "Abre o calendário no chat para o cliente escolher a data inicial e final.";
     } else {
       preview = text ? (text.length > 60 ? text.slice(0,60)+"…" : text) : "(sem texto)";
     }
@@ -1980,7 +1993,7 @@ function renderTabDiagrama(err){
       <div class="db-head">
         <span>${diagramBranchIcon(step)} Etapa ${stepNumber(err, step.id)}</span>
         <div class="db-actions">
-          <button class="db-edit" title="Editar na aba 3">✎</button>
+          <button class="db-edit" title="Editar na aba 3">${ICONS.edit}</button>
           <button class="db-del" title="Excluir etapa">×</button>
         </div>
       </div>
@@ -2284,7 +2297,7 @@ function renderPathExpansionView(err){
         const isCorr = node.branch && node.branch.after && node.branch.after.kind === "apply_correction";
         box.className = "diagram-box diagram-term diagram-term-" + (isCorr ? "correction" : "message");
         box.style.borderStyle = "dashed";
-        const icon = isCorr ? "✅" : "💬";
+        const icon = isCorr ? ICONS.check : ICONS.chat;
         const text = node.branch && node.branch.after ? htmlToText(node.branch.after.text) || "(sem texto)" : "(sem texto)";
         box.innerHTML = `<div class="db-head"><span>${icon} Fim</span></div><div class="db-body" style="font-size:11px;">${escapeHtml(text)}</div>`;
       } else {
@@ -2296,7 +2309,7 @@ function renderPathExpansionView(err){
           <div class="db-head">
             <span>${stepLabel(node.stepId)}</span>
             <div class="db-actions">
-              <button class="db-edit path-edit-btn" data-step-id="${node.stepId}" title="Editar na aba 3" style="cursor:pointer;">✎</button>
+              <button class="db-edit path-edit-btn" data-step-id="${node.stepId}" title="Editar na aba 3" style="cursor:pointer;">${ICONS.edit}</button>
             </div>
           </div>
         `;
@@ -2387,11 +2400,11 @@ function buildFlowScriptHtml(ef, stepId, depth, visited){
   let html = `<div class="flow-script-step" style="margin-left:${depth*20}px;">`;
   html += `<div class="flow-script-q"><strong>${n})</strong> ${qtext}</div>`;
   if(step.type === "periodo"){
-    const calHint = step.calendar_mode === "data_unica" ? "📅 Mostrar o calendário. Cliente escolhe uma data." : "📅 Mostrar o calendário. Cliente escolhe a data inicial e final.";
+    const calHint = step.calendar_mode === "data_unica" ? "Mostrar o calendário. Cliente escolhe uma data." : "Mostrar o calendário. Cliente escolhe a data inicial e final.";
     html += `<div class="hint" style="margin:2px 0 8px;">${calHint}</div>`;
     html += afterScriptHtml(ef, step.after, depth, visited);
   } else if(step.response_type === "texto_livre"){
-    html += `<div class="hint" style="margin:2px 0 8px;">✏️ Resposta em texto livre.</div>`;
+    html += `<div class="hint" style="margin:2px 0 8px;">Resposta em texto livre.</div>`;
     html += afterScriptHtml(ef, step.after, depth, visited);
   } else {
     html += `<div class="hint" style="margin:2px 0 4px;">${step.response_type === "sim_nao" ? "Sim/Não:" : "Múltipla escolha:"}</div>`;
@@ -2410,8 +2423,8 @@ function buildFlowScriptHtml(ef, stepId, depth, visited){
 function afterScriptHtml(ef, after, depth, visited){
   if(!after || !after.kind) return `<div class="hint" style="margin-left:${depth*20}px;">(sem destino definido)</div>`;
   if(after.kind === "step") return buildFlowScriptHtml(ef, after.step_id, depth, visited);
-  if(after.kind === "message") return `<div style="margin:4px 0;margin-left:${depth*20}px;">💬 Mensagem final: "${escapeHtml(substituteVars(after.text))}"</div>`;
-  if(after.kind === "apply_correction") return `<div style="margin:4px 0;margin-left:${depth*20}px;">✅ Aplica correção nas vendas e exibe mensagem final: "${escapeHtml(substituteVars(after.text))}"</div>`;
+  if(after.kind === "message") return `<div style="margin:4px 0;margin-left:${depth*20}px;">${ICONS.chat} Mensagem final: "${escapeHtml(substituteVars(after.text))}"</div>`;
+  if(after.kind === "apply_correction") return `<div style="margin:4px 0;margin-left:${depth*20}px;">${ICONS.check} Aplica correção nas vendas e exibe mensagem final: "${escapeHtml(substituteVars(after.text))}"</div>`;
   return "";
 }
 
@@ -2871,7 +2884,7 @@ function setupAnalystsModal(){
     // List
     const listSection = document.createElement("div");
     listSection.className = "field";
-    listSection.innerHTML = `<label>Analistas cadastrados</label>`;
+    listSection.innerHTML = `<label>Agentes cadastrados</label>`;
     const list = document.createElement("div");
     list.style.display = "flex";
     list.style.flexDirection = "column";
@@ -2879,7 +2892,7 @@ function setupAnalystsModal(){
     list.style.marginBottom = "20px";
 
     if(!state.analysts.length){
-      list.innerHTML = `<div class="hint">Nenhum analista cadastrado ainda.</div>`;
+      list.innerHTML = `<div class="hint">Nenhum agente cadastrado ainda.</div>`;
     } else {
       state.analysts.forEach(a => {
         const row = document.createElement("div");
@@ -2897,7 +2910,7 @@ function setupAnalystsModal(){
           renderFilters();
         };
         row.querySelector(".btn-analyst-del").onclick = () => {
-          if(!confirm(`Excluir analista "${a.name}"?`)) return;
+          if(!confirm(`Excluir agente "${a.name}"?`)) return;
           state.analysts = state.analysts.filter(x => x.id !== a.id);
           state.errors.forEach(e => { if(e.assigned_to === a.id) e.assigned_to = null; });
           scheduleSave();
@@ -2913,9 +2926,9 @@ function setupAnalystsModal(){
     // Add form
     const addSection = document.createElement("div");
     addSection.innerHTML = `
-      <label class="field"><b>Adicionar analista</b></label>
+      <label class="field"><b>Adicionar agente</b></label>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <input type="text" id="newAnalystName" placeholder="Nome do analista" style="flex:1;min-width:180px;padding:8px 12px;font-size:13px;">
+        <input type="text" id="newAnalystName" placeholder="Nome do agente" style="flex:1;min-width:180px;padding:8px 12px;font-size:13px;">
         <div style="display:flex;gap:6px;align-items:center;">
           ${ANALYST_COLORS.map((c,i) => `<label style="cursor:pointer;"><input type="radio" name="analystColor" value="${c}" ${i===0?'checked':''} style="display:none;"><span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:${c};border:3px solid transparent;" class="color-radio-dot" data-color="${c}"></span></label>`).join('')}
         </div>
@@ -2941,7 +2954,7 @@ function setupAnalystsModal(){
 
     document.getElementById("btnAddAnalyst").onclick = () => {
       const name = document.getElementById("newAnalystName").value.trim();
-      if(!name){ alert("Informe o nome do analista."); return; }
+      if(!name){ alert("Informe o nome do agente."); return; }
       const colorRadio = body.querySelector("input[name=analystColor]:checked");
       const color = colorRadio ? colorRadio.value : ANALYST_COLORS[0];
       const id = "a_" + Math.random().toString(36).slice(2,9);
@@ -3011,7 +3024,7 @@ function setupDashboardModal(){
 
     // Per-analyst section
     if(state.analysts && state.analysts.length){
-      html += `<div class="field"><label>Por analista</label><div style="display:flex;flex-direction:column;gap:8px;">`;
+      html += `<div class="field"><label>Por agente</label><div style="display:flex;flex-direction:column;gap:8px;">`;
       state.analysts.forEach(a => {
         const assigned = errors.filter(e => e.assigned_to === a.id);
         const analystDone = assigned.filter(e => e.status === "pronto").length;
@@ -3029,7 +3042,7 @@ function setupDashboardModal(){
       });
       html += `</div></div>`;
     } else {
-      html += `<div class="hint">Nenhum analista cadastrado. Use o botão 👥 Analistas para adicionar.</div>`;
+      html += `<div class="hint">Nenhum agente cadastrado. Use o botão Agentes para adicionar.</div>`;
     }
 
     body.innerHTML = html;
