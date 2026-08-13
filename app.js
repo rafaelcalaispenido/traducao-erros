@@ -1,8 +1,8 @@
 /* ================= TOKEN CRIPTOGRAFADO (AES-GCM + PBKDF2) ================= */
 const _ENC = {
-  salt: "5355287455026cabf1801ebad327b06c",
-  iv:   "b536e19fab9fe1426a15b1cb",
-  data: "f4ff9b6ac4d473b402c2330144e0766b337c8a77dbdcdd3162a79037a1976ab07b732655390ff8de8ea5968438694df8b39af84fcbaf95bf"
+  salt: "3eb88ccd2f5f154056e8b012f5ec9299",
+  iv:   "bc374f87de0dd91adc3d5c5a",
+  data: "17d6334c402c1092b2efe686ff79997bcdc4c87c2a4e74fdb0e6b15f6bafb2e18710c94017769c7ea11067ad51fa57a9300b238e568327ae"
 };
 let _token = null;
 const getToken = () => _token;
@@ -182,6 +182,39 @@ function DEFAULT_ANALYSTS(){
   ];
 }
 
+const AGENT_ASSIGNMENTS = {
+  calais: ["00383","E0010","E0014","E0025","E0032","E0038","E0060","E0081","E0093","E0116","E0120","E0160"],
+  rafa:   ["E0061","E0240","E0304","E0310","E0312","E0370","E0713","E1010","E1011","GW3000","L64","L66","L84","RNG6110"]
+};
+
+// Atribui erros a Calais/Rafa conforme AGENT_ASSIGNMENTS, apenas se ainda sem responsável.
+// Retorna true se algum erro foi alterado.
+function migrateAgentAssignments(){
+  let changed = false;
+  for(const [agentId, codes] of Object.entries(AGENT_ASSIGNMENTS)){
+    for(const code of codes){
+      const err = state.errors.find(e => e.code === code);
+      if(err && !err.assigned_to){
+        err.assigned_to = agentId;
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+// Garante que Calais e Rafa sempre existam em state.analysts. Retorna true se algo foi adicionado.
+function mergeDefaultAnalysts(){
+  let changed = false;
+  for(const def of DEFAULT_ANALYSTS()){
+    if(!state.analysts.find(a => a.id === def.id)){
+      state.analysts.unshift(def);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 let GROUP_LABELS = { portal_nacional:"Portal Nacional", abrasf:"ABRASF", sefaz_nfe55:"SEFAZ NF-e 55" };
 function rebuildGroupLabels(){
   if(state && state.groups && state.groups.length){
@@ -219,15 +252,16 @@ async function loadFromGist(){
       state = JSON.parse(file.content);
       const before = state.errors.length;
       state.errors = state.errors.filter(e => e.group !== "xml_soap");
-      const seededAnalysts = !state.analysts || !state.analysts.length;
-      if(!state.analysts || !state.analysts.length) state.analysts = DEFAULT_ANALYSTS();
+      if(!state.analysts) state.analysts = [];
+      const seededAnalysts = mergeDefaultAnalysts();
       state.groups = state.groups || [
         {key:"portal_nacional",label:"Portal Nacional"},
         {key:"abrasf",label:"ABRASF"},
         {key:"sefaz_nfe55",label:"SEFAZ NF-e 55"}
       ];
       rebuildGroupLabels();
-      if(state.errors.length !== before || seededAnalysts) await saveToGist(true);
+      const migratedAssignments = migrateAgentAssignments();
+      if(state.errors.length !== before || seededAnalysts || migratedAssignments) await saveToGist(true);
       setSyncStatus("ok","Sincronizado");
     } else {
       state = buildSeed();
@@ -244,7 +278,8 @@ async function loadFromGist(){
     const cached = localStorage.getItem("nfse-errors-cache");
     if(cached){
       state = JSON.parse(cached);
-      if(!state.analysts || !state.analysts.length) state.analysts = DEFAULT_ANALYSTS();
+      if(!state.analysts) state.analysts = [];
+      mergeDefaultAnalysts();
       state.groups = state.groups || [{key:"portal_nacional",label:"Portal Nacional"},{key:"abrasf",label:"ABRASF"},{key:"sefaz_nfe55",label:"SEFAZ NF-e 55"}];
       rebuildGroupLabels();
       setSyncStatus("err","Erro ao sincronizar (usando cache local)");
@@ -328,45 +363,46 @@ function renderFilters(){
 }
 
 let activeGroup = Object.keys(GROUP_LABELS)[0];
-let activeAgent = "";  // "" = todos, "calais" = primeiros 13 portal_nacional, "rafa" = últimos 13
+let activeAgent = "";  // "" = todos, ou id do agente
 
-function getAgentCodes(){
-  const portalErrors = state.errors
-    .filter(e => e.group === "portal_nacional")
-    .sort((a,b) => a.code.localeCompare(b.code));
-  const half = Math.ceil(portalErrors.length / 2);
-  return {
-    calais: new Set(portalErrors.slice(0, half).map(e => e.code)),
-    rafa:   new Set(portalErrors.slice(half).map(e => e.code))
-  };
+function renderAgentsDropdown(){
+  const inner = document.getElementById("agentsDropdownInner");
+  if(!inner) return;
+  inner.innerHTML = "";
+  const analysts = (state && state.analysts) ? state.analysts : [];
+  analysts.forEach(a => {
+    const item = document.createElement("div");
+    item.className = "agents-dropdown-item" + (activeAgent === a.id ? " active" : "");
+    item.dataset.agent = a.id;
+    item.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.color};margin-right:6px;vertical-align:middle;"></span>${escapeHtml(a.name)}`;
+    item.onclick = () => { activeAgent = a.id; updateAgentsBtn(); renderSidebar(); };
+    inner.appendChild(item);
+  });
+  const divider = document.createElement("div");
+  divider.className = "agents-dropdown-divider";
+  inner.appendChild(divider);
+  const todos = document.createElement("div");
+  todos.className = "agents-dropdown-item" + (activeAgent === "" ? " active" : "");
+  todos.dataset.agent = "";
+  todos.textContent = "Todos";
+  todos.onclick = () => { activeAgent = ""; updateAgentsBtn(); renderSidebar(); };
+  inner.appendChild(todos);
 }
-
-document.querySelectorAll(".agents-dropdown-item").forEach(item => {
-  item.onclick = () => {
-    activeAgent = item.dataset.agent;
-    // Se selecionou agente, força aba portal_nacional
-    if(activeAgent) activeGroup = "portal_nacional";
-    updateAgentsBtn();
-    renderSidebar();
-  };
-});
 
 function updateAgentsBtn(){
   const btn = document.getElementById("agentsBtn");
-  const labels = { calais:"Calais", rafa:"Rafa", "":"Agentes" };
-  const label = labels[activeAgent] ?? "Agentes";
-  btn.innerHTML = `${label}${activeAgent ? `<span class="agent-badge">${activeAgent==="calais"?"13":"13"}</span>` : ""}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+  const analysts = (state && state.analysts) ? state.analysts : [];
+  const activeAnalyst = analysts.find(a => a.id === activeAgent);
+  const label = activeAnalyst ? activeAnalyst.name : "Agentes";
+  const count = activeAnalyst ? state.errors.filter(e => e.assigned_to === activeAgent).length : 0;
+  btn.innerHTML = `${escapeHtml(label)}${activeAnalyst ? `<span class="agent-badge">${count}</span>` : ""}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
   btn.classList.toggle("active-agent", !!activeAgent);
-  document.querySelectorAll(".agents-dropdown-item").forEach(el => {
-    el.classList.toggle("active", el.dataset.agent === activeAgent);
-  });
+  renderAgentsDropdown();
 }
 
 function renderGroupTabs(){
   const term = (document.getElementById("searchInput").value || "").toLowerCase();
-  const agentCodes = activeAgent ? getAgentCodes()[activeAgent] : null;
-  // Se agente ativo, só mostra aba portal_nacional (único grupo dos agentes)
-  const visibleGroups = activeAgent ? ["portal_nacional"] : Object.keys(GROUP_LABELS);
+  const visibleGroups = Object.keys(GROUP_LABELS);
   const tabsEl = document.getElementById("groupTabs");
   tabsEl.innerHTML = "";
   for(const key of visibleGroups){
@@ -374,7 +410,7 @@ function renderGroupTabs(){
     const count = state.errors.filter(e => e.group === key &&
       (e.code.toLowerCase().includes(term) || (e.client_facing.title||"").toLowerCase().includes(term)) &&
       (statusFilter.size === 0 || statusFilter.has(e.status)) &&
-      (!agentCodes || agentCodes.has(e.code)) &&
+      (activeAgent === "" || e.assigned_to === activeAgent) &&
       (analystFilter === "" || e.assigned_to === analystFilter)
     ).length;
     if(count === 0) continue;
@@ -388,7 +424,7 @@ function renderGroupTabs(){
     state.errors.some(e => e.group === k &&
       (e.code.toLowerCase().includes(term) || (e.client_facing.title||"").toLowerCase().includes(term)) &&
       (statusFilter.size === 0 || statusFilter.has(e.status)) &&
-      (!agentCodes || agentCodes.has(e.code)) &&
+      (activeAgent === "" || e.assigned_to === activeAgent) &&
       (analystFilter === "" || e.assigned_to === analystFilter)
     )
   );
@@ -398,14 +434,14 @@ function renderGroupTabs(){
 function renderSidebar(){
   renderFilters();
   renderGroupTabs();
+  renderAgentsDropdown();
   const container = document.getElementById("groupsContainer");
   container.innerHTML = "";
   const term = (document.getElementById("searchInput").value || "").toLowerCase();
-  const agentCodes = activeAgent ? getAgentCodes()[activeAgent] : null;
   const items = state.errors.filter(e => e.group === activeGroup &&
     (e.code.toLowerCase().includes(term) || (e.client_facing.title||"").toLowerCase().includes(term)) &&
     (statusFilter.size === 0 || statusFilter.has(e.status)) &&
-    (!agentCodes || agentCodes.has(e.code)) &&
+    (activeAgent === "" || e.assigned_to === activeAgent) &&
     (analystFilter === "" || e.assigned_to === analystFilter)
   );
   for(const e of items){
@@ -2878,6 +2914,63 @@ function mountRichEditor(container, html, placeholder, onChange){
 /* ================= ANALISTAS MODAL ================= */
 const ANALYST_COLORS = ["#7a1f6e","#0ea899","#2d7dd2","#dd9d1f","#dc4747","#2d6b2d"];
 
+function deleteAnalystWithTransfer(analyst){
+  const assigned = state.errors.filter(e => e.assigned_to === analyst.id);
+  const others = state.analysts.filter(a => a.id !== analyst.id);
+
+  if(assigned.length === 0){
+    if(!confirm(`Excluir agente "${analyst.name}"?`)) return;
+    state.analysts = others;
+    scheduleSave();
+    renderSidebar();
+    renderAnalysts();
+    return;
+  }
+
+  // Build transfer dialog
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;";
+  const box = document.createElement("div");
+  box.style.cssText = "background:#fff;border-radius:12px;padding:28px 32px;max-width:420px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.18);";
+  box.innerHTML = `
+    <h3 style="margin:0 0 10px;font-size:16px;">Excluir agente "${escapeHtml(analyst.name)}"</h3>
+    <p style="margin:0 0 18px;color:#555;font-size:14px;">${assigned.length} erro(s) estão atribuídos a este agente. Para quem deseja transferi-los?</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;" id="transferList">
+      ${others.map(a => `
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 10px;border:1px solid #e0e0e0;border-radius:7px;">
+          <input type="radio" name="transferTo" value="${escapeAttr(a.id)}" style="accent-color:${a.color};">
+          <span style="width:12px;height:12px;border-radius:50%;background:${a.color};display:inline-block;flex:none;"></span>
+          <span style="font-size:14px;">${escapeHtml(a.name)}</span>
+        </label>
+      `).join('')}
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 10px;border:1px solid #e0e0e0;border-radius:7px;">
+        <input type="radio" name="transferTo" value="" ${others.length===0?'checked':''}>
+        <span style="font-size:14px;color:#888;">Deixar sem responsável</span>
+      </label>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn-ghost btn-sm" id="transferCancel">Cancelar</button>
+      <button class="btn-primary btn-sm" id="transferConfirm" style="background:var(--danger);border-color:var(--danger);">Excluir e transferir</button>
+    </div>
+  `;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  overlay.querySelector("#transferCancel").onclick = () => overlay.remove();
+  overlay.onclick = e => { if(e.target === overlay) overlay.remove(); };
+  overlay.querySelector("#transferConfirm").onclick = () => {
+    const radio = box.querySelector("input[name=transferTo]:checked");
+    const targetId = radio ? radio.value : "";
+    state.errors.forEach(e => { if(e.assigned_to === analyst.id) e.assigned_to = targetId || null; });
+    state.analysts = others;
+    if(activeAgent === analyst.id) activeAgent = "";
+    overlay.remove();
+    scheduleSave();
+    renderSidebar();
+    renderAnalysts();
+  };
+}
+
 function renderAnalysts(){
   const body = document.getElementById("analystsBody");
   if(!body) return;
@@ -2913,12 +3006,7 @@ function renderAnalysts(){
         renderFilters();
       };
       row.querySelector(".btn-analyst-del").onclick = () => {
-        if(!confirm(`Excluir agente "${a.name}"?`)) return;
-        state.analysts = state.analysts.filter(x => x.id !== a.id);
-        state.errors.forEach(e => { if(e.assigned_to === a.id) e.assigned_to = null; });
-        scheduleSave();
-        renderSidebar();
-        renderAnalysts();
+        deleteAnalystWithTransfer(a);
       };
       list.appendChild(row);
     });
@@ -2964,6 +3052,7 @@ function renderAnalysts(){
     state.analysts.push({ id, name, color });
     scheduleSave();
     renderFilters();
+    renderAgentsDropdown();
     renderAnalysts();
   };
 }
