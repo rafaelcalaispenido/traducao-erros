@@ -1,21 +1,29 @@
 /* ================= TOKEN CRIPTOGRAFADO (AES-GCM + PBKDF2) ================= */
+// Senha de acesso à ferramenta: TraducaoErros
 const _ENC = {
-  salt: "3eb88ccd2f5f154056e8b012f5ec9299",
-  iv:   "bc374f87de0dd91adc3d5c5a",
-  data: "17d6334c402c1092b2efe686ff79997bcdc4c87c2a4e74fdb0e6b15f6bafb2e18710c94017769c7ea11067ad51fa57a9300b238e568327ae"
+  salt: "c63f53acf44e826dee4e2370d21f3b67",
+  iv:   "2bc8ffb4639e8c88846aea7c",
+  data: "789f667822c259d15936ae5548a34c1672390a45bfd4e33d9f018307bcd02961025afdf4ad2d75aced5fb93632ce99a418bc54a84c3e62e1"
+};
+// Senha de administrador: admin@2026
+const _ENC_ADMIN = {
+  salt: "84dafccf03b84a045486bcc88d2e182d",
+  iv:   "6f854e0962dd657a8624951f",
+  data: "b5a7c516300872b7f9c68a07c59d6998a6ef8d677aca540daaf237541c05840acf22294a71ec6069dc877d95e866fa5b4d1d0b5a0d77da57"
 };
 let _token = null;
 const getToken = () => _token;
 
 function fromHex(hex){ return new Uint8Array(hex.match(/.{2}/g).map(b=>parseInt(b,16))); }
 
-async function decryptToken(password){
+async function decryptToken(password, enc){
+  const e = enc || _ENC;
   const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
   const key = await crypto.subtle.deriveKey(
-    { name:"PBKDF2", salt:fromHex(_ENC.salt), iterations:100000, hash:"SHA-256" },
+    { name:"PBKDF2", salt:fromHex(e.salt), iterations:100000, hash:"SHA-256" },
     keyMaterial, { name:"AES-GCM", length:256 }, false, ["decrypt"]
   );
-  const decrypted = await crypto.subtle.decrypt({ name:"AES-GCM", iv:fromHex(_ENC.iv) }, key, fromHex(_ENC.data));
+  const decrypted = await crypto.subtle.decrypt({ name:"AES-GCM", iv:fromHex(e.iv) }, key, fromHex(e.data));
   return new TextDecoder().decode(decrypted);
 }
 
@@ -3305,7 +3313,7 @@ function setupAdminModal(){
     const pwd = prompt("Senha de administrador:");
     if(!pwd) return;
     // validate by attempting decrypt
-    decryptToken(pwd).then(() => {
+    decryptToken(pwd, _ENC_ADMIN).then(() => {
       overlay.style.display = "flex";
       renderAdmin();
     }).catch(() => {
